@@ -496,10 +496,41 @@ function setSearchCondition(type: string, criteria: string): void
   ptt.setSearchCondition(type, criteria);
 }
 
+export const ORIGINAL_EXTENSION_ID = 'Yukai.vscode-ptt';
+
+/**
+ * The fork keeps the original's command ids, view ids and `ptt:` scheme, so both cannot run
+ * together: whichever activates second fails while registering. Detect that and tell the
+ * user instead of failing silently.
+ */
+export function findConflictingExtension (): vscode.Extension<unknown> | undefined {
+  const self = ctx?.extension?.id?.toLowerCase();
+  const original = vscode.extensions?.getExtension?.(ORIGINAL_EXTENSION_ID);
+  if (!original || original.id.toLowerCase() === self) {
+    return undefined;
+  }
+  return original;
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   ctx = context;
   logger.init();
   logger.log('Extension activating...');
+
+  if (findConflictingExtension()) {
+    logger.error(`[Activate] ${ORIGINAL_EXTENSION_ID} is also enabled; refusing to start to avoid id conflicts.`);
+    const action = await vscode.window.showErrorMessage(
+      '偵測到原版 VSCode 批踢踢（Yukai.vscode-ptt）也在啟用中。兩者的指令與側邊欄相同會互相衝突，請解除安裝或停用原版後重新載入視窗。',
+      '開啟原版擴充功能頁面',
+      '重新載入視窗'
+    );
+    if (action === '開啟原版擴充功能頁面') {
+      await vscode.commands.executeCommand('workbench.extensions.search', `@installed ${ORIGINAL_EXTENSION_ID}`);
+    } else if (action === '重新載入視窗') {
+      await vscode.commands.executeCommand('workbench.action.reloadWindow');
+    }
+    return;
+  }
 
   const persistedFavorites = ctx.globalState.get<FavoriteBoardItem[]>('cachedFavorites');
   if (persistedFavorites && persistedFavorites.length > 0) {

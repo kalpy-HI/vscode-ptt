@@ -148,7 +148,21 @@ pnpm package
 code --install-extension vscode-ptt-0.4.1.vsix --force
 ```
 
-這個 Fork 的擴充功能 ID 是 `kalpy.vscode-ptt`（原版為 `Yukai.vscode-ptt`），兩者可以同時存在，市集的自動更新也不會覆蓋它。建議先在擴充功能面板停用或解除安裝原版，免得兩個側邊欄同時出現。
+這個 Fork 的擴充功能 ID 是 `kalpy.vscode-ptt`（原版為 `Yukai.vscode-ptt`），市集的自動更新不會覆蓋它。**但兩者不能同時啟用**：指令、側邊欄與 `ptt:` 文章網址都和原版相同，同時啟用時側邊欄不會出現。請先解除安裝原版：
+
+```bash
+code --uninstall-extension Yukai.vscode-ptt
+```
+
+裝好後在 VS Code 執行「Developer: Reload Window」（重新載入視窗），左側活動列才會出現 PTT 圖示。如果原版仍在啟用，Fork 版會跳出提示並停止啟動。
+
+看不到圖示時可以這樣檢查：
+
+```bash
+code --list-extensions --show-versions
+```
+
+清單裡應該只有 `kalpy.vscode-ptt`，沒有 `Yukai.vscode-ptt`。如果兩者都沒有，代表 `code` 指令對應的是別的編輯器（例如 VS Code Insiders 或 Cursor），請改在那個編輯器裡用「從 VSIX 安裝…」選 `vscode-ptt.vsix`。另外也可以在左側活動列按右鍵，確認「VSCode PTT」沒有被隱藏。
 
 也可以在 VS Code 擴充功能面板右上角 `⋯` → **從 VSIX 安裝…** 選這個檔案。安裝後重新載入視窗，左側活動列會出現 PTT 圖示。
 
