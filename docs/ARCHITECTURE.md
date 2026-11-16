@@ -124,7 +124,7 @@ flowchart TD
 
 ### 安裝（從自己的 Fork 打包 .vsix）
 
-需要 Node.js 20+、pnpm 與 VS Code 的 `code` 指令。
+需要 Node.js 20+ 與 pnpm。
 
 ```bash
 git clone https://github.com/<你的帳號>/vscode-ptt.git
@@ -139,14 +139,18 @@ pnpm install
 ```
 
 ```bash
-pnpm package
+pnpm run package:local
 ```
 
-會在專案根目錄產生 `vscode-ptt-<版本>.vsix`，接著安裝：
+會在專案根目錄產生 `vscode-ptt.vsix`。接著在 **VS Code 裡**安裝：
 
-```bash
-code --install-extension vscode-ptt-0.5.0.vsix --force
-```
+1. 打開擴充功能面板（`Ctrl+Shift+X`）
+2. 右上角 `⋯` → **從 VSIX 安裝…**（Install from VSIX…），選 `vscode-ptt.vsix`
+3. 按通知上的「重新載入」，左側活動列會出現「VSCode PTT (kalpy)」
+
+之後改了程式碼，重跑 `pnpm run package:local` 再用同樣方式安裝即可。
+
+> **不建議在 VS Code 開著時用 `code --install-extension`（或 `pnpm run install:local`）安裝。** 開著的視窗可能把自己記憶中的擴充功能清單（`~/.vscode/extensions/extensions.json`）寫回去，蓋掉剛裝的那一筆，結果資料夾在、`code --list-extensions` 也列得出來，但 VS Code 裡完全看不到。要用指令列安裝，請先關閉所有 VS Code 視窗。
 
 這個 Fork 的擴充功能 ID 是 `kalpy.vscode-ptt`（原版為 `Yukai.vscode-ptt`），市集的自動更新不會覆蓋它。Fork 自己註冊的東西都加了 `kalpy` 前綴，可以和原版同時安裝：
 
@@ -159,38 +163,21 @@ code --install-extension vscode-ptt-0.5.0.vsix --force
 
 兩者共用的只有 `ptt` 語言（語法高亮）和設定值（`kickLogin`、`previewImages` 等），改設定會同時影響兩邊。
 
-裝好後在 VS Code 執行「Developer: Reload Window」（重新載入視窗），左側活動列才會出現「VSCode PTT (kalpy)」圖示。
+#### 裝了卻看不到圖示
 
-看不到圖示時可以這樣檢查：
-
-```bash
-code --list-extensions --show-versions
-```
-
-清單裡應該要有 `kalpy.vscode-ptt`。如果沒有，代表 `code` 指令對應的是別的編輯器（例如 VS Code Insiders 或 Cursor），請改在你平常用的編輯器裡用「從 VSIX 安裝…」選 `vscode-ptt.vsix`。另外也可以在左側活動列按右鍵，確認「VSCode PTT (kalpy)」沒有被隱藏。
-
-也可以在 VS Code 擴充功能面板右上角 `⋯` → **從 VSIX 安裝…** 選這個檔案。安裝後重新載入視窗，左側活動列會出現 PTT 圖示。
+1. 擴充功能面板搜尋 `@installed kalpy`。找不到的話，多半是上面說的清單被覆蓋：關閉所有 VS Code 視窗，執行 `code --uninstall-extension kalpy.vscode-ptt`，刪掉 `~/.vscode/extensions/kalpy.vscode-ptt-*` 資料夾，以及 `~/.vscode/extensions/.obsolete`（若裡面有 kalpy），再用「從 VSIX 安裝…」重裝
+2. 在左側活動列按右鍵，確認「VSCode PTT (kalpy)」沒有被隱藏
+3. 用 VS Code 打開專案按 `F5` →「Run Extension」，在不安裝的情況下直接跑原始碼，可以確認是程式還是安裝的問題
 
 注意事項：
 
 - `package.json` 指定的是 `pnpm@12`。如果你的 pnpm 版本切換失敗，可以用 `mise install` 裝指定版本，或在 `~/.npmrc` 加上 `manage-package-manager-versions=false`，改用本機的 pnpm 10。
-- 改完程式碼後重新執行 `pnpm package`，再用同一行 `code --install-extension ... --force` 覆蓋安裝即可。
 
 ### 部署
 
 #### A. 安裝到自己的 VS Code（最常用）
 
-在專案根目錄執行。這行會打包成 `vscode-ptt.vsix` 並直接覆蓋安裝；改完程式碼後重跑同一行即可：
-
-```bash
-pnpm install
-```
-
-```bash
-pnpm run install:local
-```
-
-完成後在 VS Code 執行「Developer: Reload Window」。
+同上一節：`pnpm run package:local` 打包，再在 VS Code 裡「從 VSIX 安裝…」。
 
 #### B. 發佈 GitHub Release（給其他電腦或朋友安裝）
 

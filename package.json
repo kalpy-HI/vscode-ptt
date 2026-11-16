@@ -380,6 +380,7 @@
     "test:integration": "vscode-test",
     "test": "pnpm compile && pnpm test:unit && pnpm --filter ptt-client test",
     "package": "vsce package --no-dependencies",
+    "package:local": "vsce package --no-dependencies --out vscode-ptt.vsix",
     "install:local": "vsce package --no-dependencies --out vscode-ptt.vsix && code --install-extension vscode-ptt.vsix --force"
   },
   "devDependencies": {
