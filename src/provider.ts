@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { IPttClient } from './types';
+import store from './store';
 
 export default class PttFileSystemProvider implements vscode.FileSystemProvider {
   static scheme = 'kalpy-ptt';
@@ -157,7 +158,7 @@ export default class PttFileSystemProvider implements vscode.FileSystemProvider 
     }
 
     try {
-      const article = await this.ptt.getArticle(boardname, sn);
+      const article = await this.ptt.getArticle(boardname, sn, store.getSearch(boardname));
       if (!article || !article.lines) {
         throw vscode.FileSystemError.FileNotFound(uri);
       }
@@ -190,7 +191,7 @@ export default class PttFileSystemProvider implements vscode.FileSystemProvider 
     }
 
     try {
-      const article = await this.ptt.getArticle(boardname, sn);
+      const article = await this.ptt.getArticle(boardname, sn, store.getSearch(boardname));
       if (!article || !article.lines) {
         return false;
       }

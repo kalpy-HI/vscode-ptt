@@ -11,6 +11,7 @@ import type {
   ArticleDetail,
   FavoriteBoardItem,
   PttState,
+  SearchConditionInput,
 } from './types';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -177,6 +178,18 @@ export class Bot extends EventEmitter {
 
   public isSearchConditionSet(): boolean {
     return this.searchCondition.conditions.length > 0;
+  }
+
+  /**
+   * Search string for an explicit list of conditions, or for the global ones set through
+   * setSearchCondition() when `conditions` is undefined. Explicit conditions are resolved when
+   * the queued command runs, so concurrent calls for different boards cannot leak filters.
+   */
+  public buildSearchString(conditions?: SearchConditionInput[]): string {
+    const list = conditions
+      ? conditions.map((c) => new Condition(c.type, c.criteria))
+      : this.searchCondition.conditions;
+    return list.map((c) => c.toSearchString()).join(keymap.Enter);
   }
 
   public async login(username = '', password = '', kick = true): Promise<boolean> {
@@ -405,7 +418,11 @@ export class Bot extends EventEmitter {
     });
   }
 
-  public async getArticles(boardname: string, offset = 0): Promise<ArticleListItem[]> {
+  public async getArticles(
+    boardname: string,
+    offset = 0,
+    conditions?: SearchConditionInput[]
+  ): Promise<ArticleListItem[]> {
     return this.enqueue(async () => {
       const entered = await this.enterBoard(boardname);
       if (!entered) {
@@ -413,10 +430,8 @@ export class Bot extends EventEmitter {
         return [];
       }
 
-      if (this.isSearchConditionSet()) {
-        const searchString = this.searchCondition.conditions
-          .map((c) => c.toSearchString())
-          .join(keymap.Enter);
+      const searchString = this.buildSearchString(conditions);
+      if (searchString) {
         await this.send(`${searchString}${keymap.Enter}`);
       }
 
@@ -471,7 +486,11 @@ export class Bot extends EventEmitter {
     });
   }
 
-  public async getArticle(boardname: string, sn: number | string): Promise<ArticleDetail> {
+  public async getArticle(
+    boardname: string,
+    sn: number | string,
+    conditions?: SearchConditionInput[]
+  ): Promise<ArticleDetail> {
     return this.enqueue(async () => {
       const entered = await this.enterBoard(boardname);
       if (!entered) {
@@ -485,10 +504,8 @@ export class Bot extends EventEmitter {
         };
       }
 
-      if (this.isSearchConditionSet()) {
-        const searchString = this.searchCondition.conditions
-          .map((c) => c.toSearchString())
-          .join(keymap.Enter);
+      const searchString = this.buildSearchString(conditions);
+      if (searchString) {
         await this.send(`${searchString}${keymap.Enter}`);
       }
 

@@ -1,5 +1,5 @@
 import type { ArticleListItem } from './store';
-import type { FavoriteBoardItem, IPttClient, PttArticleDetail, PttClientState } from './types';
+import type { FavoriteBoardItem, IPttClient, PttArticleDetail, PttClientState, SearchCondition } from './types';
 
 /**
  * Read-only PTT client backed by the web version (https://www.ptt.cc/bbs).
@@ -295,11 +295,12 @@ export class WebPttClient implements IPttClient {
     return ok;
   }
 
-  private searchQuery(): string | null {
-    if (this.searchConditions.length === 0) {
+  /** Web search query (`q=`) for the given conditions; null when not searching. */
+  static searchQuery(conditions: { type: string; criteria: string }[]): string | null {
+    if (conditions.length === 0) {
       return null;
     }
-    const parts = this.searchConditions.map(({ type, criteria }) => {
+    const parts = conditions.map(({ type, criteria }) => {
       switch (type) {
         case 'push':
           return `recommend:${criteria}`;
@@ -321,8 +322,12 @@ export class WebPttClient implements IPttClient {
       : { pageKey: base, maxSn: offset };
   }
 
-  private async fetchListing(boardname: string, pageKey: number | null): Promise<ListingPage | null> {
-    const q = this.searchQuery();
+  private async fetchListing(
+    boardname: string,
+    pageKey: number | null,
+    conditions: { type: string; criteria: string }[] = this.searchConditions
+  ): Promise<ListingPage | null> {
+    const q = WebPttClient.searchQuery(conditions);
     let path: string;
     if (q !== null) {
       const page = pageKey === null ? 1 : SEARCH_BASE - pageKey;
@@ -368,13 +373,14 @@ export class WebPttClient implements IPttClient {
     return { pageKey: key, articles };
   }
 
-  async getArticles(boardname: string, offset = 0): Promise<ArticleListItem[]> {
+  async getArticles(boardname: string, offset = 0, conditions?: SearchCondition[]): Promise<ArticleListItem[]> {
+    const active = conditions ?? this.searchConditions;
     let listing: ListingPage | null;
     if (!offset || offset <= 0) {
-      listing = await this.fetchListing(boardname, null);
+      listing = await this.fetchListing(boardname, null, active);
     } else {
       const { pageKey, maxSn } = WebPttClient.pageKeyForOffset(offset);
-      listing = await this.fetchListing(boardname, pageKey);
+      listing = await this.fetchListing(boardname, pageKey, active);
       if (listing) {
         // Pinned posts only matter on the newest page
         listing.articles = listing.articles.filter(a => !a.fixed && a.sn <= maxSn);
@@ -386,24 +392,15 @@ export class WebPttClient implements IPttClient {
     return listing?.articles ?? [];
   }
 
-  async getArticle(boardname: string, sn: string | number): Promise<PttArticleDetail> {
+  async getArticle(boardname: string, sn: string | number, conditions?: SearchCondition[]): Promise<PttArticleDetail> {
     const key = `${boardname}/${sn}`;
     let href = this.links.get(key);
     if (!href) {
       // e.g. an editor tab restored after reload: re-read the listing page that sn came from
       const numericSn = Number(sn);
       const pageKey = Math.floor(numericSn / 100);
-      if (pageKey < SEARCH_BASE / 2) {
-        const saved = this.searchConditions;
-        this.searchConditions = [];
-        try {
-          await this.fetchListing(boardname, pageKey);
-        } finally {
-          this.searchConditions = saved;
-        }
-      } else {
-        await this.fetchListing(boardname, pageKey);
-      }
+      const isSearchSn = pageKey >= SEARCH_BASE / 2;
+      await this.fetchListing(boardname, pageKey, isSearchSn ? (conditions ?? this.searchConditions) : []);
       href = this.links.get(key);
     }
     if (!href) {

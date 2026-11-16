@@ -1,4 +1,4 @@
-import { IPttClient, FavoriteBoardItem, PttArticleDetail, PttClientState } from '../../types';
+import { IPttClient, FavoriteBoardItem, PttArticleDetail, PttClientState, SearchCondition } from '../../types';
 import { ArticleListItem } from '../../store';
 
 export class MockPttClient implements IPttClient {
@@ -51,11 +51,19 @@ export class MockPttClient implements IPttClient {
     return boardname.length > 0;
   }
 
-  async getArticles(boardname: string, _fromSn?: number): Promise<ArticleListItem[]> {
+  public getArticlesCalls: { boardname: string; fromSn?: number; conditions?: SearchCondition[] }[] = [];
+  /** Optional search results by board, used when conditions are passed */
+  public searchResultsByBoard: Record<string, ArticleListItem[]> = {};
+
+  async getArticles(boardname: string, fromSn?: number, conditions?: SearchCondition[]): Promise<ArticleListItem[]> {
+    this.getArticlesCalls.push({ boardname, fromSn, conditions });
+    if (conditions && conditions.length > 0) {
+      return this.searchResultsByBoard[boardname] || [];
+    }
     return this.articlesByBoard[boardname] || [];
   }
 
-  async getArticle(boardname: string, sn: string | number): Promise<PttArticleDetail> {
+  async getArticle(boardname: string, sn: string | number, _conditions?: SearchCondition[]): Promise<PttArticleDetail> {
     const key = `${boardname}/${sn}`;
     return this.articleDetails[key] || { lines: ['[No Content]'] };
   }

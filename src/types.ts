@@ -22,14 +22,21 @@ export interface PttClientState {
   [key: string]: any;
 }
 
+/** 搜尋條件：title = 標題關鍵字、author = 作者、push = 推文數下限 */
+export interface SearchCondition {
+  type: 'title' | 'author' | 'push';
+  criteria: string;
+}
+
 export interface IPttClient {
   state: PttClientState;
   _state?: PttClientState;
   login(username?: string, password?: string, kickLogin?: boolean): Promise<any>;
   getFavorite(): Promise<FavoriteBoardItem[]>;
   enterBoard(boardname: string): Promise<boolean>;
-  getArticles(boardname: string, fromSn?: number): Promise<ArticleListItem[]>;
-  getArticle(boardname: string, sn: string | number): Promise<PttArticleDetail>;
+  /** `conditions` limits the listing to a search; omit it for the global (legacy) search state */
+  getArticles(boardname: string, fromSn?: number, conditions?: SearchCondition[]): Promise<ArticleListItem[]>;
+  getArticle(boardname: string, sn: string | number, conditions?: SearchCondition[]): Promise<PttArticleDetail>;
   setSearchCondition(type: string, criteria: string): void;
   resetSearchCondition(): void;
   send(keys: string): Promise<any>;
