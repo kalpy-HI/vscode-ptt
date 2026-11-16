@@ -50,7 +50,7 @@ flowchart TD
   I -- 失敗 --> X
 
   X --> M([使用者點「登入」/ PTT: 登入])
-  M --> N[輸入帳號<br/>guest 免密碼]
+  M --> N[輸入帳號<br/>guest 會被伺服器拒絕]
   N --> O[輸入密碼]
   O --> P[ptt.login]
   P -- 成功 --> Q[儲存帳密至 globalState<br/>顯示「以 xxx 登入成功！」] --> J
@@ -108,19 +108,45 @@ flowchart TD
 
 ## 五、使用方式
 
-### 安裝
+### 安裝（從自己的 Fork 打包 .vsix）
 
-1. 在 VS Code 擴充功能市集搜尋 **「VSCode 批踢踢」**（`Yukai.vscode-ptt`）安裝，或：
-   ```bash
-   code --install-extension Yukai.vscode-ptt
-   ```
-2. 左側活動列出現 PTT 圖示，點開即為「文章列表」。
+需要 Node.js 20+、pnpm 與 VS Code 的 `code` 指令。
+
+```bash
+git clone https://github.com/<你的帳號>/vscode-ptt.git
+```
+
+```bash
+cd vscode-ptt
+```
+
+```bash
+pnpm install
+```
+
+```bash
+pnpm package
+```
+
+會在專案根目錄產生 `vscode-ptt-<版本>.vsix`，接著安裝：
+
+```bash
+code --install-extension vscode-ptt-0.4.1.vsix --force
+```
+
+也可以在 VS Code 擴充功能面板右上角 `⋯` → **從 VSIX 安裝…** 選這個檔案。安裝後重新載入視窗，左側活動列會出現 PTT 圖示。
+
+注意事項：
+
+- 自己打包的版本和市集版的 ID 一樣，都是 `Yukai.vscode-ptt`。如果裝過市集版，`.vsix` 會直接覆蓋它；但市集出新版時，自動更新可能又把它換回市集版。可以在該擴充功能的齒輪選單取消「自動更新」，或把 `package.json` 的 `publisher`／`name` 改成自己的，讓兩者完全分開。
+- `package.json` 指定的是 `pnpm@12`。如果你的 pnpm 版本切換失敗，可以用 `mise install` 裝指定版本，或在 `~/.npmrc` 加上 `manage-package-manager-versions=false`，改用本機的 pnpm 10。
+- 改完程式碼後重新執行 `pnpm package`，再用同一行 `code --install-extension ... --force` 覆蓋安裝即可。
 
 ### 基本操作
 
 | 想做的事 | 操作方式 |
 | --- | --- |
-| 登入 | 側邊欄「登入」按鈕，或指令面板 `PTT: 登入`。帳號輸入 `guest` 可免密碼。帳密會記住，下次啟動自動登入 |
+| 登入 | 側邊欄「登入」按鈕，或指令面板 `PTT: 登入`。帳密會記住，下次啟動自動登入。**訪客（guest）無法使用**：PTT 伺服器會回「請改用網頁版」並中斷連線，必須用註冊帳號 |
 | 訂閱看板 | 側邊欄標題列 `＋`，輸入看板名稱（如 `C_Chat`、`Gossiping`） |
 | 從我的最愛訂閱 | 「我的最愛」會自動列出你 PTT 帳號的最愛看板；也可用指令 `ptt.favorite-board` 挑選加入「其他看板」 |
 | 看文章 | 展開看板 → 點文章標題，於編輯器以唯讀方式開啟 |
