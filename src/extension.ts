@@ -13,6 +13,15 @@ import store, { type ArticleListItem } from './store';
 import type { IPttClient, FavoriteBoardItem } from './types';
 import logger from './logger';
 import { WebPttClient, isWebClient } from './webClient';
+import {
+  LocalBoards,
+  LOCAL_BOARDS_KEY,
+  BOARD_NAME_PATTERN,
+  normalizeBoardNames,
+  parseLocalBoardsImport
+} from './localBoards';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 export type { FavoriteBoardItem } from './types';
 
@@ -60,6 +69,7 @@ export function setPttClientFactory (factory: (timeoutMs?: number) => Promise<IP
 export function updateLoginContext () {
   const loggedIn = checkLogin();
   vscode.commands.executeCommand('setContext', 'ptt:loggedIn', loggedIn);
+  vscode.commands.executeCommand('setContext', 'ptt:guestMode', loggedIn && isWebClient(ptt));
 }
 
 export function refreshTreeView () {
@@ -195,10 +205,15 @@ export async function ensureConnectedPttClient (): Promise<boolean> {
   return activeConnectPromise;
 }
 
-export async function getLoginCredential (silent = false): Promise<{ username?: string; password?: string }> {
+export async function getLoginCredential (silent = false, accountOnly = false): Promise<{ username?: string; password?: string }> {
   const isSilent = silent === true;
-  const username = ctx?.globalState?.get<string>('username');
+  let username = ctx?.globalState?.get<string>('username');
   const password = ctx?.globalState?.get<string>('password');
+
+  // Older versions stored guest as a username; an explicit account login must ask instead
+  if (accountOnly && username?.toLowerCase() === 'guest') {
+    username = undefined;
+  }
 
   const hasCredentials = Boolean(username && ((password !== undefined && password !== null) || username.toLowerCase() === 'guest'));
 
@@ -259,12 +274,69 @@ export async function login (silent = false): Promise<boolean> {
   return activeLoginPromise;
 }
 
-function clearFavoritesIfUserChanged (username: string) {
-  const previous = ctx?.globalState?.get<string>('username');
-  if (previous && previous.toLowerCase() !== username.toLowerCase()) {
+export const LOGIN_MODE_KEY = 'loginMode';
+const FAVORITES_OWNER_KEY = 'favoritesOwner';
+
+/** 我的最愛 / 熱門看板 are cached per identity; drop the cache when the identity changes. */
+function clearFavoritesIfOwnerChanged (owner: string) {
+  const normalized = owner.toLowerCase();
+  const previous = ctx?.globalState?.get<string>(FAVORITES_OWNER_KEY)
+    ?? (ctx?.globalState?.get<string>(LOGIN_MODE_KEY) === 'guest' ? 'guest' : ctx?.globalState?.get<string>('username'));
+  if (previous && previous.toLowerCase() !== normalized) {
     store.clearFavorites();
     ctx.globalState.update('cachedFavorites', []);
   }
+  ctx?.globalState?.update(FAVORITES_OWNER_KEY, normalized);
+}
+
+/** Ends the BBS session (if any) without touching saved credentials or local boards. */
+async function logoutBbsSession () {
+  if (!isWebClient(ptt) && checkLogin()) {
+    await ptt.send(`${key.ArrowLeft.repeat(10)}${key.ArrowRight}y${key.Enter}`);
+    if (ptt._state) {
+      ptt._state.login = false;
+    }
+  }
+}
+
+/** `PTT: 以訪客身分瀏覽` — a separate entry point from account login. */
+export async function loginAsGuestCommand (): Promise<boolean> {
+  if (checkLogin() && isGuestMode()) {
+    vscode.window.showInformationMessage('目前已是訪客模式');
+    return true;
+  }
+  if (checkLogin()) {
+    const username = ctx?.globalState?.get<string>('username') ?? '帳號';
+    const answer = await vscode.window.showWarningMessage(
+      `目前以 ${username} 登入。要切換到訪客模式嗎？`,
+      { modal: true, detail: '帳號會登出，但帳密會保留，之後可以直接按「登入」切回帳號。本地喜愛看板兩邊共用。' },
+      '切換到訪客模式'
+    );
+    if (answer !== '切換到訪客模式') {
+      return false;
+    }
+    liveTracker?.stopAll();
+    await logoutBbsSession();
+  }
+  return loginAsGuest(false);
+}
+
+/** `PTT: 登入` — always an account login, also used to leave guest mode. */
+export async function loginWithAccountCommand (): Promise<boolean> {
+  if (checkLogin() && !isGuestMode()) {
+    return true;
+  }
+  if (!isGuestMode()) {
+    return login(false);
+  }
+  const guestClient = ptt;
+  const success = await performLogin(false, true);
+  if (!success && isWebClient(guestClient) && !checkLogin()) {
+    // Account login failed: stay in guest mode instead of ending up logged out
+    setPttClient(guestClient);
+    refreshTreeView();
+  }
+  return success;
 }
 
 /**
@@ -288,10 +360,10 @@ async function loginAsGuest (isSilent: boolean): Promise<boolean> {
     return false;
   }
 
-  clearFavoritesIfUserChanged('guest');
+  clearFavoritesIfOwnerChanged('guest');
   setPttClient(webClient);
-  ctx.globalState.update('username', 'guest');
-  ctx.globalState.update('password', '');
+  // Account credentials are kept so switching back to the account needs no re-typing
+  ctx.globalState.update(LOGIN_MODE_KEY, 'guest');
   updateLoginContext();
   refreshTreeView();
   if (!isSilent) {
@@ -300,8 +372,12 @@ async function loginAsGuest (isSilent: boolean): Promise<boolean> {
   return true;
 }
 
-async function performLogin (isSilent: boolean): Promise<boolean> {
-  let { username, password } = await getLoginCredential(isSilent);
+async function performLogin (isSilent: boolean, accountOnly = false): Promise<boolean> {
+  if (isSilent && ctx?.globalState?.get<string>(LOGIN_MODE_KEY) === 'guest') {
+    return loginAsGuest(true);
+  }
+
+  let { username, password } = await getLoginCredential(isSilent, accountOnly);
 
   const isGuest = username?.toLowerCase() === 'guest';
   if (!username || (password === undefined && !isGuest)) {
@@ -372,9 +448,10 @@ async function performLogin (isSilent: boolean): Promise<boolean> {
   }
 
   if (success) {
-    clearFavoritesIfUserChanged(username);
+    clearFavoritesIfOwnerChanged(username);
     ctx.globalState.update('username', username);
     ctx.globalState.update('password', password ?? '');
+    ctx.globalState.update(LOGIN_MODE_KEY, 'account');
     updateLoginContext();
     refreshTreeView();
     if (!isSilent) {
@@ -464,13 +541,23 @@ export async function activate(context: vscode.ExtensionContext) {
 
   updateLoginContext();
 
-  context.subscriptions.push(vscode.commands.registerCommand('ptt.login', () => login(false)));
+  // 本地喜愛看板 follow the user to other machines through Settings Sync
+  context.globalState.setKeysForSync?.([LOCAL_BOARDS_KEY]);
+  const localBoards = new LocalBoards(context.globalState);
+
+  context.subscriptions.push(vscode.commands.registerCommand('ptt.login', () => loginWithAccountCommand()));
+  context.subscriptions.push(vscode.commands.registerCommand('ptt.login-guest', () => loginAsGuestCommand()));
   context.subscriptions.push(vscode.commands.registerCommand('ptt.logout', async () => {
-    const res = await vscode.window.showInformationMessage('你確定要登出嗎？登出會一併清除您的訂閱看板', '好', '算了');
+    const res = await vscode.window.showInformationMessage(
+      '你確定要登出嗎？會清除記住的帳密，本地喜愛看板會保留。',
+      '好',
+      '算了'
+    );
     if (res === '好') {
       ctx.globalState.update('username', null);
       ctx.globalState.update('password', null);
-      ctx.globalState.update('boardlist', []);
+      ctx.globalState.update(LOGIN_MODE_KEY, null);
+      ctx.globalState.update(FAVORITES_OWNER_KEY, null);
       ctx.globalState.update('cachedFavorites', []);
       liveTracker?.stopAll();
       store.clearAll();
@@ -478,9 +565,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
       if (isWebClient(ptt)) {
         await (ptt as WebPttClient).logout();
-      } else if (checkLogin()) {
-        await ptt.send(`${key.ArrowLeft.repeat(10)}${key.ArrowRight}y${key.Enter}`);
-        ptt._state.login = false;
+      } else {
+        await logoutBbsSession();
       }
       updateLoginContext();
 
@@ -494,12 +580,18 @@ export async function activate(context: vscode.ExtensionContext) {
       return;
     }
 
-    const boardName = await vscode.window.showInputBox({
-      prompt: '輸入看板名稱',
-      placeHolder: 'C_Chat'
+    const rawName = await vscode.window.showInputBox({
+      prompt: '輸入要加入本地喜愛看板的看板名稱',
+      placeHolder: 'C_Chat',
+      validateInput: value => (!value || BOARD_NAME_PATTERN.test(value.trim()) ? null : '看板名稱只能有英數字、底線、點與連字號')
     });
 
+    const boardName = rawName?.trim();
     if (!boardName) {
+      return;
+    }
+    if (localBoards.has(boardName)) {
+      vscode.window.showInformationMessage(`${boardName} 已在本地喜愛看板`);
       return;
     }
 
@@ -516,10 +608,94 @@ export async function activate(context: vscode.ExtensionContext) {
       return;
     }
 
-    const boardlist: string[] = ctx.globalState.get('boardlist') || [];
-    const boards = [...new Set(boardlist.concat(boardName))];
-    ctx.globalState.update('boardlist', boards.filter(Boolean));
+    await localBoards.add([boardName]);
     refreshTreeView();
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('ptt.add-to-local-boards', async (board: unknown) => {
+    const boardname = typeof board === 'string' ? board : getBoardNameFromItem(board);
+    if (!boardname) {
+      return;
+    }
+    const added = await localBoards.add([boardname]);
+    vscode.window.showInformationMessage(
+      added.length > 0 ? `已加入本地喜愛看板：${boardname}` : `${boardname} 已在本地喜愛看板`
+    );
+    refreshTreeView();
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('ptt.backup-favorites', async () => {
+    if (!checkLogin()) {
+      return;
+    }
+    const guest = isWebClient(ptt);
+    let favorites = store.hasFavorites() ? store.getFavorites() : [];
+    if (favorites.length === 0) {
+      favorites = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: guest ? '正在讀取熱門看板...' : '正在讀取我的最愛...' },
+        () => ptt.getFavorite()
+      );
+    }
+    const names = normalizeBoardNames(favorites.filter(f => !f.divider && !f.folder).map(f => f.boardname));
+    if (names.length === 0) {
+      vscode.window.showInformationMessage(guest ? '目前沒有熱門看板可以加入' : '我的最愛目前沒有看板可以備份');
+      return;
+    }
+    const source = guest ? '熱門看板' : '我的最愛';
+    const answer = await vscode.window.showInformationMessage(
+      `要把${source}的 ${names.length} 個看板全部加入本地喜愛看板嗎？`,
+      { modal: true, detail: '已在本地喜愛看板的看板不會重複加入。' },
+      '全部加入'
+    );
+    if (answer !== '全部加入') {
+      return;
+    }
+    const added = await localBoards.add(names);
+    vscode.window.showInformationMessage(`已從${source}加入 ${added.length} 個看板到本地喜愛看板（共 ${localBoards.list().length} 個）`);
+    refreshTreeView();
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('ptt.export-local-boards', async () => {
+    const boards = localBoards.list();
+    if (boards.length === 0) {
+      vscode.window.showInformationMessage('本地喜愛看板是空的，沒有東西可以匯出');
+      return;
+    }
+    const target = await vscode.window.showSaveDialog({
+      defaultUri: vscode.Uri.file(path.join(os.homedir(), 'ptt-local-boards.json')),
+      filters: { JSON: ['json'] },
+      saveLabel: '匯出'
+    });
+    if (!target) {
+      return;
+    }
+    const content = JSON.stringify(localBoards.toExport(), null, 2) + '\n';
+    await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(content));
+    vscode.window.showInformationMessage(`已匯出 ${boards.length} 個本地喜愛看板到 ${target.fsPath}`);
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('ptt.import-local-boards', async () => {
+    const picked = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      filters: { '看板清單': ['json', 'txt'] },
+      openLabel: '匯入'
+    });
+    if (!picked || picked.length === 0) {
+      return;
+    }
+    try {
+      const bytes = await vscode.workspace.fs.readFile(picked[0]);
+      const names = parseLocalBoardsImport(new TextDecoder('utf-8').decode(bytes));
+      if (names.length === 0) {
+        vscode.window.showWarningMessage('檔案裡沒有找到看板名稱');
+        return;
+      }
+      const added = await localBoards.add(names);
+      vscode.window.showInformationMessage(`匯入完成：檔案有 ${names.length} 個看板，新增 ${added.length} 個`);
+      refreshTreeView();
+    } catch (err) {
+      vscode.window.showErrorMessage(`匯入失敗：${err instanceof Error ? err.message : String(err)}`);
+    }
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand('ptt.show-article', async (sn, boardname) => {
@@ -540,14 +716,12 @@ export async function activate(context: vscode.ExtensionContext) {
     );
   }));
 
-  context.subscriptions.push(vscode.commands.registerCommand('ptt.remove-board', (board: Board | unknown) => {
+  context.subscriptions.push(vscode.commands.registerCommand('ptt.remove-board', async (board: Board | unknown) => {
     const boardname = getBoardNameFromItem(board);
     if (!boardname) {
       return;
     }
-    const boardlist: string[] = ctx.globalState.get('boardlist') || [];
-    const boards = boardlist.filter(b => b !== boardname);
-    ctx.globalState.update('boardlist', boards.filter(Boolean));
+    await localBoards.remove(boardname);
     refreshTreeView();
   }));
 
@@ -658,13 +832,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('ptt.favorite-board', async () => {
-      const boardlist: string[] = ctx.globalState.get('boardlist') || [];
       const boardName = await pickFavorite();
       if (!boardName) {
         return;
       }
-      const boards = [...new Set(boardlist.concat(boardName))];
-      ctx.globalState.update('boardlist', boards.filter(Boolean));
+      await localBoards.add([boardName]);
       refreshTreeView();
     })
   );

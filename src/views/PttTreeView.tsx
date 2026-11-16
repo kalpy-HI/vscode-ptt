@@ -5,6 +5,7 @@ import store, { type ArticleListItem } from '../store';
 import type { IPttClient, FavoriteBoardItem } from '../types';
 import logger from '../logger';
 import { isWebClient } from '../webClient';
+import { LocalBoards } from '../localBoards';
 
 export interface PttTreeViewProps {
   ptt: IPttClient;
@@ -13,9 +14,26 @@ export interface PttTreeViewProps {
   version?: number;
 }
 
+export const LOCAL_ID_PREFIX = 'local:';
+const LOCAL_ID_PREFIX_RE = /^local:/;
+const ROOT_IDS = new Set([
+  'favorite-root',
+  'custom-boards-root',
+  'not-logged-in',
+  'not-logged-in-guest',
+  'no-boards',
+  'local-boards-empty'
+]);
+
 export function getBoardNameFromItem(boardItem: unknown): string | undefined {
   if (!boardItem) {
     return undefined;
+  }
+  // Boards in 本地喜愛看板 may also appear under 我的最愛 / 熱門看板, so their tree ids
+  // carry a prefix to stay unique.
+  const stripLocal = (id: string) => id.replace(LOCAL_ID_PREFIX_RE, '');
+  if (typeof boardItem === 'string') {
+    boardItem = stripLocal(boardItem);
   }
 
   const ignoreLabels = new Set([
@@ -24,6 +42,10 @@ export function getBoardNameFromItem(boardItem: unknown): string | undefined {
     '目前沒有熱門看板',
     '載入熱門看板中...',
     '其他看板',
+    '本地喜愛看板',
+    '尚未加入本地喜愛看板',
+    '以帳號登入',
+    '以訪客身分瀏覽',
     '尚未登入 PTT',
     '尚未訂閱任何看板',
     '載入更多文章',
@@ -41,13 +63,7 @@ export function getBoardNameFromItem(boardItem: unknown): string | undefined {
     if (boardItem.startsWith('board-')) {
       return boardItem.replace('board-', '');
     }
-    if (
-      boardItem === 'favorite-root' ||
-      boardItem === 'custom-boards-root' ||
-      boardItem === 'not-logged-in' ||
-      boardItem === 'no-boards' ||
-      ignoreLabels.has(boardItem)
-    ) {
+    if (ROOT_IDS.has(boardItem) || ignoreLabels.has(boardItem)) {
       return undefined;
     }
     return boardItem;
@@ -60,13 +76,14 @@ export function getBoardNameFromItem(boardItem: unknown): string | undefined {
   if (item.value && typeof item.value === 'object') {
     const val = item.value as Record<string, unknown>;
     if (typeof val.id === 'string') {
-      if (val.id.startsWith('loadmore-')) {
-        return val.id.replace('loadmore-', '');
+      const id = stripLocal(val.id);
+      if (id.startsWith('loadmore-')) {
+        return id.replace('loadmore-', '');
       }
-      if (val.id.startsWith('board-')) {
-        return val.id.replace('board-', '');
+      if (id.startsWith('board-')) {
+        return id.replace('board-', '');
       }
-      if (val.id === 'favorite-root' || val.id === 'custom-boards-root' || val.id === 'not-logged-in') {
+      if (ROOT_IDS.has(id)) {
         return undefined;
       }
     }
@@ -84,13 +101,14 @@ export function getBoardNameFromItem(boardItem: unknown): string | undefined {
     }
   }
   if (typeof item.id === 'string') {
-    if (item.id.startsWith('loadmore-')) {
-      return item.id.replace('loadmore-', '');
+    const id = stripLocal(item.id);
+    if (id.startsWith('loadmore-')) {
+      return id.replace('loadmore-', '');
     }
-    if (item.id.startsWith('board-')) {
-      return item.id.replace('board-', '');
+    if (id.startsWith('board-')) {
+      return id.replace('board-', '');
     }
-    if (item.id === 'favorite-root' || item.id === 'custom-boards-root' || item.id === 'not-logged-in') {
+    if (ROOT_IDS.has(id)) {
       return undefined;
     }
   }
@@ -109,7 +127,8 @@ export function getBoardNameFromItem(boardItem: unknown): string | undefined {
 export const ArticleNode: FC<{
   article: ArticleListItem;
   boardName: string;
-}> = ({ article, boardName }) => {
+  idPrefix?: string;
+}> = ({ article, boardName, idPrefix = '' }) => {
   const getIcon = () => {
     if (article.fixed) {
       return new vscode.ThemeIcon('pin');
@@ -138,7 +157,7 @@ export const ArticleNode: FC<{
 
   return (
     <TreeItem
-      id={`${boardName}-${article.sn}`}
+      id={`${idPrefix}${boardName}-${article.sn}`}
       label={article.title}
       description={description}
       tooltip={tooltip}
@@ -159,7 +178,10 @@ export const BoardNode: FC<{
   ptt?: IPttClient;
   isLoggedIn?: boolean;
   version?: number;
-}> = ({ boardName, boardTitle }) => {
+  /** 'board' = 本地喜愛看板 (removable), 'remoteBoard' = 我的最愛 / 熱門看板 */
+  contextValue?: 'board' | 'remoteBoard';
+  idPrefix?: string;
+}> = ({ boardName, boardTitle, contextValue = 'board', idPrefix = '' }) => {
   const articles = store.asList(boardName);
   const articleCount = articles.length;
   const description = articleCount > 0 ? `${articleCount} 篇` : boardTitle;
@@ -169,16 +191,16 @@ export const BoardNode: FC<{
 
   return (
     <TreeItem
-      id={`board-${boardName}`}
+      id={`${idPrefix}board-${boardName}`}
       label={boardName}
       description={description}
       tooltip={tooltip}
-      iconPath={new vscode.ThemeIcon('bookmark')}
-      contextValue="board"
+      iconPath={new vscode.ThemeIcon(contextValue === 'board' ? 'heart' : 'bookmark')}
+      contextValue={contextValue}
     >
       {articleCount === 0 && (
         <TreeItem
-          id={`loading-${boardName}`}
+          id={`${idPrefix}loading-${boardName}`}
           label="載入文章中..."
           iconPath={new vscode.ThemeIcon('loading~spin')}
           command={{
@@ -194,12 +216,13 @@ export const BoardNode: FC<{
           key={`${boardName}-${article.sn}`}
           article={article}
           boardName={boardName}
+          idPrefix={idPrefix}
         />
       ))}
 
       {articleCount > 0 && !hasReachedBeginning && (
         <TreeItem
-          id={`loadmore-${boardName}`}
+          id={`${idPrefix}loadmore-${boardName}`}
           label="載入更多文章"
           iconPath={new vscode.ThemeIcon('arrow-down')}
           contextValue="loadMore"
@@ -213,7 +236,7 @@ export const BoardNode: FC<{
 
       {hasReachedBeginning && (
         <TreeItem
-          id={`end-${boardName}`}
+          id={`${idPrefix}end-${boardName}`}
           label="已載入所有歷史文章"
           iconPath={new vscode.ThemeIcon('check')}
         />
@@ -355,6 +378,7 @@ export const FavoriteNode: FC<{
             key={fav.boardname}
             boardName={fav.boardname}
             boardTitle={fav.title?.trim()}
+            contextValue="remoteBoard"
             ptt={ptt}
             isLoggedIn={isLoggedIn}
             version={version}
@@ -364,54 +388,90 @@ export const FavoriteNode: FC<{
   );
 };
 
-export const PttTreeView: FC<PttTreeViewProps> = ({ ptt, context, isLoggedIn, version }) => {
-  const [boardList, setBoardList] = useState<string[]>(() => context?.globalState?.get<string[]>('boardlist') || []);
+export const LocalBoardsNode: FC<{
+  ptt: IPttClient;
+  context: vscode.ExtensionContext;
+  isLoggedIn: boolean;
+  version?: number;
+}> = ({ ptt, context, isLoggedIn, version }) => {
+  const [boardList, setBoardList] = useState<string[]>(() => new LocalBoards(context?.globalState).list());
 
   useEffect(() => {
-    const list = context?.globalState?.get<string[]>('boardlist') || [];
-    setBoardList(list);
+    setBoardList(new LocalBoards(context?.globalState).list());
   }, [context, version]);
 
+  const boards = [...boardList].sort((a, b) => a.localeCompare(b, 'en', { sensitivity: 'base' }));
+
+  return (
+    <TreeItem
+      id="custom-boards-root"
+      label="本地喜愛看板"
+      description={boards.length > 0 ? `${boards.length} 個 · 存在本機` : '存在本機'}
+      tooltip="存在這台電腦的看板清單，訪客與帳號模式共用；登出、換帳號都不會清除，可匯出備份"
+      iconPath={new vscode.ThemeIcon('heart')}
+      contextValue="localBoardsRoot"
+    >
+      {boards.length === 0 && (
+        <TreeItem
+          id="local-boards-empty"
+          label="尚未加入本地喜愛看板"
+          description="點擊新增"
+          iconPath={new vscode.ThemeIcon('add')}
+          command={{ command: 'ptt.add-board', title: '新增本地喜愛看板' }}
+        />
+      )}
+      {boards.map(boardName => (
+        <BoardNode
+          key={`local-${boardName}`}
+          boardName={boardName}
+          ptt={ptt}
+          isLoggedIn={isLoggedIn}
+          version={version}
+          contextValue="board"
+          idPrefix={LOCAL_ID_PREFIX}
+        />
+      ))}
+    </TreeItem>
+  );
+};
+
+export const PttTreeView: FC<PttTreeViewProps> = ({ ptt, context, isLoggedIn, version }) => {
   if (!isLoggedIn) {
     return (
-      <TreeItem
-        id="not-logged-in"
-        label="尚未登入 PTT"
-        description="點擊登入"
-        iconPath={new vscode.ThemeIcon('sign-in')}
-        command="ptt.login"
-      />
+      <>
+        <TreeItem
+          id="not-logged-in"
+          label="以帳號登入"
+          description="登入 PTT 帳號"
+          iconPath={new vscode.ThemeIcon('sign-in')}
+          command="ptt.login"
+        />
+        <TreeItem
+          id="not-logged-in-guest"
+          label="以訪客身分瀏覽"
+          description="唯讀，免帳號"
+          tooltip="不需要帳號，透過 PTT 網頁版瀏覽（只能看，不能推文或發文）"
+          iconPath={new vscode.ThemeIcon('eye')}
+          command="ptt.login-guest"
+        />
+      </>
     );
   }
 
-  const customBoards = boardList.filter(Boolean);
-
   return (
     <>
+      <LocalBoardsNode
+        ptt={ptt}
+        context={context}
+        isLoggedIn={isLoggedIn}
+        version={version}
+      />
       <FavoriteNode
         ptt={ptt}
         context={context}
         isLoggedIn={isLoggedIn}
         version={version}
       />
-      {customBoards.length > 0 && (
-        <TreeItem
-          id="custom-boards-root"
-          label="其他看板"
-          iconPath={new vscode.ThemeIcon('bookmark')}
-          contextValue="customBoardsRoot"
-        >
-          {customBoards.sort().map(boardName => (
-            <BoardNode
-              key={`custom-${boardName}`}
-              boardName={boardName}
-              ptt={ptt}
-              isLoggedIn={isLoggedIn}
-              version={version}
-            />
-          ))}
-        </TreeItem>
-      )}
     </>
   );
 };

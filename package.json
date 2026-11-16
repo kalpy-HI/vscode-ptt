@@ -22,6 +22,9 @@
     "onFileSystem:ptt",
     "onLanguage:ptt",
     "onCommand:ptt.login",
+    "onCommand:ptt.login-guest",
+    "onCommand:ptt.export-local-boards",
+    "onCommand:ptt.import-local-boards",
     "onCommand:ptt.logout",
     "onCommand:ptt.add-board",
     "onCommand:ptt.remove-board",
@@ -62,9 +65,39 @@
     "commands": [
       {
         "command": "ptt.login",
-        "title": "登入",
+        "title": "以帳號登入",
         "category": "PTT",
         "icon": "$(sign-in)"
+      },
+      {
+        "command": "ptt.login-guest",
+        "title": "以訪客身分瀏覽（唯讀）",
+        "category": "PTT",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "ptt.add-to-local-boards",
+        "title": "加入本地喜愛看板",
+        "category": "PTT",
+        "icon": "$(heart)"
+      },
+      {
+        "command": "ptt.backup-favorites",
+        "title": "全部加入本地喜愛看板",
+        "category": "PTT",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "ptt.export-local-boards",
+        "title": "匯出本地喜愛看板",
+        "category": "PTT",
+        "icon": "$(export)"
+      },
+      {
+        "command": "ptt.import-local-boards",
+        "title": "匯入本地喜愛看板",
+        "category": "PTT",
+        "icon": "$(cloud-upload)"
       },
       {
         "command": "ptt.logout",
@@ -79,12 +112,13 @@
       },
       {
         "command": "ptt.add-board",
-        "title": "新增訂閱看板",
+        "title": "新增本地喜愛看板",
+        "category": "PTT",
         "icon": "$(add)"
       },
       {
         "command": "ptt.remove-board",
-        "title": "移除訂閱看板",
+        "title": "從本地喜愛看板移除",
         "icon": "$(trash)"
       },
       {
@@ -104,7 +138,8 @@
       },
       {
         "command": "ptt.favorite-board",
-        "title": "從我的最愛新增訂閱",
+        "title": "從我的最愛／熱門看板挑選加入本地喜愛看板",
+        "category": "PTT",
         "icon": "$(star)"
       },
       {
@@ -130,8 +165,13 @@
       "view/title": [
         {
           "command": "ptt.login",
-          "when": "view == pttTree && !ptt:loggedIn",
-          "group": "navigation"
+          "when": "view == pttTree && (!ptt:loggedIn || ptt:guestMode)",
+          "group": "navigation@0"
+        },
+        {
+          "command": "ptt.login-guest",
+          "when": "view == pttTree && !ptt:guestMode",
+          "group": "navigation@0"
         },
         {
           "command": "ptt.add-board",
@@ -147,28 +187,96 @@
           "command": "ptt.logout",
           "when": "view == pttTree && ptt:loggedIn",
           "group": "navigation@3"
+        },
+        {
+          "command": "ptt.export-local-boards",
+          "when": "view == pttTree",
+          "group": "2_localBoards@1"
+        },
+        {
+          "command": "ptt.import-local-boards",
+          "when": "view == pttTree",
+          "group": "2_localBoards@2"
+        },
+        {
+          "command": "ptt.favorite-board",
+          "when": "view == pttTree && ptt:loggedIn",
+          "group": "2_localBoards@3"
         }
       ],
       "view/item/context": [
         {
           "command": "ptt.refresh-board",
-          "when": "view == pttTree && viewItem == board",
+          "when": "view == pttTree && (viewItem == board || viewItem == remoteBoard)",
           "group": "inline@1"
         },
         {
+          "command": "ptt.add-to-local-boards",
+          "when": "view == pttTree && viewItem == remoteBoard",
+          "group": "inline@2"
+        },
+        {
           "command": "ptt.refresh-board",
-          "when": "view == pttTree && viewItem == board",
+          "when": "view == pttTree && (viewItem == board || viewItem == remoteBoard)",
           "group": "1_modification@1"
         },
         {
           "command": "ptt.search-board-by-push",
-          "when": "view == pttTree && viewItem == board",
+          "when": "view == pttTree && (viewItem == board || viewItem == remoteBoard)",
           "group": "1_modification@2"
+        },
+        {
+          "command": "ptt.add-to-local-boards",
+          "when": "view == pttTree && viewItem == remoteBoard",
+          "group": "1_modification@3"
         },
         {
           "command": "ptt.remove-board",
           "when": "view == pttTree && viewItem == board",
           "group": "1_modification@3"
+        },
+        {
+          "command": "ptt.add-board",
+          "when": "view == pttTree && viewItem == localBoardsRoot",
+          "group": "inline@1"
+        },
+        {
+          "command": "ptt.export-local-boards",
+          "when": "view == pttTree && viewItem == localBoardsRoot",
+          "group": "1_modification@1"
+        },
+        {
+          "command": "ptt.import-local-boards",
+          "when": "view == pttTree && viewItem == localBoardsRoot",
+          "group": "1_modification@2"
+        },
+        {
+          "command": "ptt.backup-favorites",
+          "when": "view == pttTree && viewItem == favoriteRoot",
+          "group": "inline@1"
+        },
+        {
+          "command": "ptt.backup-favorites",
+          "when": "view == pttTree && viewItem == favoriteRoot",
+          "group": "1_modification@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "ptt.add-to-local-boards",
+          "when": "false"
+        },
+        {
+          "command": "ptt.remove-board",
+          "when": "false"
+        },
+        {
+          "command": "ptt.refresh-board",
+          "when": "false"
+        },
+        {
+          "command": "ptt.search-board-by-push",
+          "when": "false"
         }
       ],
       "editor/title": [
@@ -194,7 +302,7 @@
     "viewsWelcome": [
       {
         "view": "pttTree",
-        "contents": "尚未登入 PTT。\n[登入](command:ptt.login)"
+        "contents": "尚未登入 PTT。\n[以帳號登入](command:ptt.login)\n[以訪客身分瀏覽（唯讀）](command:ptt.login-guest)"
       }
     ],
     "views": {
