@@ -295,7 +295,7 @@ async function loginAsGuest (isSilent: boolean): Promise<boolean> {
   updateLoginContext();
   refreshTreeView();
   if (!isSilent) {
-    vscode.window.showInformationMessage('以訪客身分登入（網頁版唯讀模式，「我的最愛」顯示熱門看板）');
+    vscode.window.showInformationMessage('以訪客身分登入（網頁版唯讀模式，側邊欄顯示「熱門看板」）');
   }
   return true;
 }
@@ -405,7 +405,9 @@ async function pickFavorite (): Promise<string | null> {
     };
   });
 
-  const board = await vscode.window.showQuickPick(favoriteItems);
+  const board = await vscode.window.showQuickPick(favoriteItems, {
+    placeHolder: isWebClient(ptt) ? '從熱門看板挑選要訂閱的看板（訪客模式）' : '從我的最愛挑選要訂閱的看板'
+  });
   if (board){
     return board.label;
   }

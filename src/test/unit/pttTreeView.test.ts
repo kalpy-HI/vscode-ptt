@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import type * as vscode from 'vscode';
-import { PttTreeViewController, getBoardNameFromItem } from '../../views/PttTreeView';
+import { PttTreeViewController, getBoardNameFromItem, getFavoriteLabels } from '../../views/PttTreeView';
 import { MockPttClient } from './mockPttClient';
 import store from '../../store';
 import type { FavoriteBoardItem } from '../../types';
@@ -43,10 +43,31 @@ describe('PttTreeView Component and Controller Tests', () => {
       );
     });
 
+    it('does not treat the hot-board root or its placeholders as board names', () => {
+      assert.strictEqual(getBoardNameFromItem({ label: '熱門看板' }), undefined);
+      assert.strictEqual(getBoardNameFromItem({ label: '目前沒有熱門看板' }), undefined);
+      assert.strictEqual(getBoardNameFromItem({ value: { id: 'favorite-root', label: '熱門看板' } }), undefined);
+    });
+
     it('returns undefined for invalid or nullish inputs', () => {
       assert.strictEqual(getBoardNameFromItem(null), undefined);
       assert.strictEqual(getBoardNameFromItem(undefined), undefined);
       assert.strictEqual(getBoardNameFromItem({}), undefined);
+    });
+  });
+
+  describe('getFavoriteLabels', () => {
+    it('calls the node 我的最愛 for logged-in accounts', () => {
+      const labels = getFavoriteLabels(false);
+      assert.strictEqual(labels.root, '我的最愛');
+      assert.strictEqual(labels.icon, 'star');
+    });
+
+    it('calls the node 熱門看板 in guest mode so hot boards are not mistaken for favorites', () => {
+      const labels = getFavoriteLabels(true);
+      assert.strictEqual(labels.root, '熱門看板');
+      assert.strictEqual(labels.description, '訪客模式');
+      assert.ok(!Object.values(labels).some(v => typeof v === 'string' && v.includes('我的最愛') && v !== labels.tooltip));
     });
   });
 

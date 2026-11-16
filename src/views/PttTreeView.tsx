@@ -4,6 +4,7 @@ import ReactTreeView, { TreeItem } from '@hackmd/react-vsc-treeview';
 import store, { type ArticleListItem } from '../store';
 import type { IPttClient, FavoriteBoardItem } from '../types';
 import logger from '../logger';
+import { isWebClient } from '../webClient';
 
 export interface PttTreeViewProps {
   ptt: IPttClient;
@@ -19,6 +20,9 @@ export function getBoardNameFromItem(boardItem: unknown): string | undefined {
 
   const ignoreLabels = new Set([
     '我的最愛',
+    '熱門看板',
+    '目前沒有熱門看板',
+    '載入熱門看板中...',
     '其他看板',
     '尚未登入 PTT',
     '尚未訂閱任何看板',
@@ -218,12 +222,39 @@ export const BoardNode: FC<{
   );
 };
 
+/**
+ * Guest mode reads the web version, which has no personal favorites; the same tree node
+ * then shows PTT's hot boards, so it must not be called 我的最愛.
+ */
+export function getFavoriteLabels(isGuest: boolean) {
+  return isGuest
+    ? {
+        root: '熱門看板',
+        description: '訪客模式',
+        tooltip: 'PTT 網頁版的熱門看板（訪客沒有個人的我的最愛）',
+        icon: 'flame',
+        loading: '載入熱門看板中...',
+        empty: '目前沒有熱門看板',
+        error: '載入熱門看板失敗'
+      }
+    : {
+        root: '我的最愛',
+        description: undefined,
+        tooltip: '你的 PTT 帳號的我的最愛',
+        icon: 'star',
+        loading: '載入我的最愛中...',
+        empty: '我的最愛目前沒有看板',
+        error: '載入我的最愛失敗'
+      };
+}
+
 export const FavoriteNode: FC<{
   ptt: IPttClient;
   context: vscode.ExtensionContext;
   isLoggedIn: boolean;
   version?: number;
 }> = ({ ptt, context, isLoggedIn, version }) => {
+  const labels = getFavoriteLabels(isWebClient(ptt));
   const [favorites, setFavorites] = useState<FavoriteBoardItem[]>(() => {
     const inStore = store.getFavorites();
     if (inStore && inStore.length > 0) {
@@ -263,13 +294,13 @@ export const FavoriteNode: FC<{
       context?.globalState?.update('cachedFavorites', validFavorites);
       setFavorites(validFavorites);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '載入我的最愛失敗';
+      const message = err instanceof Error ? err.message : labels.error;
       logger.error('[Favorites] Failed to load favorites:', message);
       setError(message);
     } finally {
       setLoading(false);
     }
-  }, [ptt, isLoggedIn, context]);
+  }, [ptt, isLoggedIn, context, labels.error]);
 
   useEffect(() => {
     if (isLoggedIn && ptt?.state?.login) {
@@ -283,14 +314,16 @@ export const FavoriteNode: FC<{
   return (
     <TreeItem
       id="favorite-root"
-      label="我的最愛"
-      iconPath={new vscode.ThemeIcon('star')}
+      label={labels.root}
+      description={labels.description}
+      tooltip={labels.tooltip}
+      iconPath={new vscode.ThemeIcon(labels.icon)}
       contextValue="favoriteRoot"
     >
       {loading && (
         <TreeItem
           id="favorite-loading"
-          label="載入我的最愛中..."
+          label={labels.loading}
           iconPath={new vscode.ThemeIcon('loading~spin')}
         />
       )}
@@ -311,7 +344,7 @@ export const FavoriteNode: FC<{
       {!loading && !error && favorites.length === 0 && (
         <TreeItem
           id="favorite-empty"
-          label="我的最愛目前沒有看板"
+          label={labels.empty}
           iconPath={new vscode.ThemeIcon('info')}
         />
       )}
