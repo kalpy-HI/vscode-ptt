@@ -9,6 +9,7 @@
 ### Added
 
 - 訪客模式改用 PTT 網頁版 (www.ptt.cc) 讀取看板與文章，「我的最愛」顯示熱門看板
+- 滑鼠移到外部連結時預覽縮圖、標題與摘要（讀取網頁 og:image；YouTube 直接顯示影片縮圖；PTT 文章取內文第一張圖），可用 `previewLinks` 設定關閉
 
 ### Fixed
 

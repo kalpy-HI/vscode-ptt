@@ -225,7 +225,13 @@
             "default": false
           },
           "previewImages": {
-            "description": "在懸浮提示中預覽 Imgur 及圖片連結 (Preview Imgur and image links in hover card)",
+            "description": "在懸浮提示中預覽 Imgur 及圖片連結；關閉時也會停用外部連結預覽 (Preview Imgur and image links in hover card)",
+            "type": "boolean",
+            "scope": "window",
+            "default": true
+          },
+          "previewLinks": {
+            "description": "在懸浮提示中預覽外部連結的縮圖與標題（讀取網頁的 og:image，YouTube 直接顯示影片縮圖）(Preview thumbnail and title of external links in hover card)",
             "type": "boolean",
             "scope": "window",
             "default": true

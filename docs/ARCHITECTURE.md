@@ -8,7 +8,7 @@ flowchart LR
     EXT["extension.ts<br/>啟動、指令註冊、登入流程"]
     TREE["views/PttTreeView.tsx<br/>側邊欄「文章列表」(React TreeView)"]
     FS["provider.ts<br/>ptt:// 唯讀檔案系統"]
-    HOVER["hoverProvider.ts<br/>圖片 / Imgur 懸浮預覽"]
+    HOVER["hoverProvider.ts + linkPreview.ts<br/>圖片 / 外部連結懸浮預覽"]
     LIVE["liveTracker.ts<br/>即時追推文 (定時刷新)"]
     STORE["store.ts<br/>文章列表 / 我的最愛快取"]
     Q["PttQueue<br/>序列化所有 PTT 請求"]
@@ -207,7 +207,7 @@ code --install-extension vscode-ptt.vsix --force
 | 重新整理 | 看板右側 🔄 重新整理該看板；標題列 🔄 重新整理看板列表與我的最愛（同時清除推文數篩選） |
 | 移除看板 | 看板右鍵 → 「移除訂閱看板」 |
 | 即時追推文 | 開啟文章後按編輯器右上角 📡（或 `PTT: 切換即時追推文`），再按 ⏹ 停止 |
-| 圖片預覽 | 滑鼠停在文章中的 imgur / 圖片網址上 |
+| 圖片與連結預覽 | 滑鼠停在文章中的網址上：圖片網址直接顯示圖片；其他連結顯示網頁的縮圖、標題與摘要（YouTube 顯示影片縮圖） |
 | 登出 | 標題列登出按鈕（會一併清除帳密與訂閱看板） |
 
 ### 設定 (settings.json)
@@ -216,6 +216,7 @@ code --install-extension vscode-ptt.vsix --force
 | --- | --- | --- |
 | `kickLogin` | `false` | 登入時踢掉其他重複登入 |
 | `previewImages` | `true` | 懸浮提示中預覽圖片 |
+| `previewLinks` | `true` | 懸浮預覽外部連結的縮圖、標題與摘要 |
 | `previewImageWidth` | `320` | 預覽寬度（px，0 為不限制） |
 | `liveTrackingInterval` | `3` | 即時追推文刷新秒數（1~60） |
 | `liveTrackingAutoScroll` | `true` | 追推文時自動捲到底 |

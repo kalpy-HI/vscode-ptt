@@ -1,6 +1,17 @@
 import assert from 'node:assert';
 import * as vscode from 'vscode';
 import PttHoverProvider, { getImagePreviewUrl, extractUrlsWithRange } from '../../hoverProvider';
+import { LinkPreviewService, type LinkFetch } from '../../linkPreview';
+
+function htmlFetch(html: string, contentType = 'text/html; charset=utf-8'): LinkFetch {
+  return async (url: string) => ({
+    ok: true,
+    status: 200,
+    url,
+    headers: { get: (name: string) => (name.toLowerCase() === 'content-type' ? contentType : null) },
+    arrayBuffer: async () => new TextEncoder().encode(html).buffer as ArrayBuffer
+  });
+}
 
 describe('PttHoverProvider & Image Link Tests', () => {
   describe('getImagePreviewUrl', () => {
@@ -215,12 +226,79 @@ describe('PttHoverProvider & Image Link Tests', () => {
       assert.strictEqual(provider.provideHover(doc, positionAfter), null);
     });
 
-    it('returns null when hovering over a non-image URL', () => {
-      const provider = new PttHoverProvider();
+    it('returns null for a non-image URL whose page has no preview metadata', async () => {
+      const provider = new PttHoverProvider(new LinkPreviewService(htmlFetch('<html><head></head><body>hi</body></html>')));
       const doc = createMockDocument(['※ 文章網址: https://www.ptt.cc/bbs/C_Chat/M.12345.A.html']);
       const position = new vscode.Position(0, 20);
 
-      assert.strictEqual(provider.provideHover(doc, position), null);
+      assert.strictEqual(await provider.provideHover(doc, position), null);
+    });
+
+    it('shows og:image, title and description for external links', async () => {
+      const html = `<html><head>
+        <meta property="og:title" content="測試 &amp; 標題">
+        <meta property="og:description" content="這是 [說明](command:evil)">
+        <meta property="og:image" content="/img/cover.png">
+        <meta property="og:site_name" content="Example">
+      </head></html>`;
+      const provider = new PttHoverProvider(new LinkPreviewService(htmlFetch(html)));
+      const doc = createMockDocument(['推 user: https://example.com/news/1 看看']);
+
+      const hover = await provider.provideHover(doc, new vscode.Position(0, 15)) as vscode.Hover;
+      assert.ok(hover);
+      const md = hover.contents as unknown as vscode.MarkdownString;
+      assert.strictEqual(md.isTrusted, false, 'page metadata must not enable command links');
+      assert.ok(md.value.includes('<img src="https://example.com/img/cover.png" width="320" />'));
+      assert.ok(md.value.includes('測試 & 標題'));
+      assert.ok(md.value.includes('Example'));
+      assert.ok(!md.value.includes('](command:evil)'), 'description must be escaped');
+    });
+
+    it('uses an image link from the description when the page has no og:image (PTT articles)', async () => {
+      const html = '<meta property="og:title" content="[Vtub] 標題"><meta property="og:description" content="內文 https://i.imgur.com/n6tSRH8.jpeg 更多">';
+      const provider = new PttHoverProvider(new LinkPreviewService(htmlFetch(html)));
+      const doc = createMockDocument(['https://www.ptt.cc/bbs/C_Chat/M.1.A.1.html']);
+
+      const hover = await provider.provideHover(doc, new vscode.Position(0, 5)) as vscode.Hover;
+      const md = hover.contents as unknown as vscode.MarkdownString;
+      assert.ok(md.value.includes('<img src="https://i.imgur.com/n6tSRH8.jpeg" width="320" />'));
+    });
+
+    it('shows YouTube thumbnails without fetching the page', async () => {
+      let fetched = false;
+      const provider = new PttHoverProvider(new LinkPreviewService(async () => {
+        fetched = true;
+        throw new Error('should not fetch');
+      }));
+      const doc = createMockDocument(['https://youtu.be/9TtAwAeXP60']);
+
+      const hover = await provider.provideHover(doc, new vscode.Position(0, 5)) as vscode.Hover;
+      assert.ok(hover);
+      const md = hover.contents as unknown as vscode.MarkdownString;
+      assert.ok(md.value.includes('https://i.ytimg.com/vi/9TtAwAeXP60/hqdefault.jpg'));
+      assert.strictEqual(fetched, false);
+    });
+
+    it('does not fetch external links when previewLinks is disabled', () => {
+      const workspaceWithConfig = vscode.workspace as unknown as {
+        getConfiguration: () => { get: (key: string, defaultValue?: unknown) => unknown };
+      };
+      const originalGetConfig = workspaceWithConfig.getConfiguration;
+      workspaceWithConfig.getConfiguration = () => ({
+        get: (key: string, defaultValue?: unknown) => (key === 'previewLinks' ? false : defaultValue)
+      });
+      try {
+        let fetched = false;
+        const provider = new PttHoverProvider(new LinkPreviewService(async () => {
+          fetched = true;
+          throw new Error('should not fetch');
+        }));
+        const doc = createMockDocument(['https://example.com/a']);
+        assert.strictEqual(provider.provideHover(doc, new vscode.Position(0, 5)), null);
+        assert.strictEqual(fetched, false);
+      } finally {
+        workspaceWithConfig.getConfiguration = originalGetConfig;
+      }
     });
 
     it('returns null when previewImages configuration is disabled', () => {
