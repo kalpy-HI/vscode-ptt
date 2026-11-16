@@ -265,7 +265,8 @@
     "test:unit": "mocha --require ./out/test/unit/setup.js ./out/test/unit/**/*.test.js",
     "test:integration": "vscode-test",
     "test": "pnpm compile && pnpm test:unit && pnpm --filter ptt-client test",
-    "package": "vsce package --no-dependencies"
+    "package": "vsce package --no-dependencies",
+    "install:local": "vsce package --no-dependencies --out vscode-ptt.vsix && code --install-extension vscode-ptt.vsix --force"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

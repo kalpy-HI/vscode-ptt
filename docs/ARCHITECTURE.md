@@ -153,6 +153,46 @@ code --install-extension vscode-ptt-0.4.1.vsix --force
 - `package.json` 指定的是 `pnpm@12`。如果你的 pnpm 版本切換失敗，可以用 `mise install` 裝指定版本，或在 `~/.npmrc` 加上 `manage-package-manager-versions=false`，改用本機的 pnpm 10。
 - 改完程式碼後重新執行 `pnpm package`，再用同一行 `code --install-extension ... --force` 覆蓋安裝即可。
 
+### 部署
+
+#### A. 安裝到自己的 VS Code（最常用）
+
+在專案根目錄執行。這行會打包成 `vscode-ptt.vsix` 並直接覆蓋安裝；改完程式碼後重跑同一行即可：
+
+```bash
+pnpm install
+```
+
+```bash
+pnpm run install:local
+```
+
+完成後在 VS Code 執行「Developer: Reload Window」。
+
+#### B. 發佈 GitHub Release（給其他電腦或朋友安裝）
+
+先把 `package.json` 的 `version` 改成新版本並 commit，再打同版本號的 tag 推上去：
+
+```bash
+git tag v0.4.2
+```
+
+```bash
+git push origin v0.4.2
+```
+
+GitHub Actions 的 `Publish Extension` 會跑 lint、測試、打包，並把 `vscode-ptt.vsix` 掛到同名 Release。其他電腦下載後執行：
+
+```bash
+code --install-extension vscode-ptt.vsix --force
+```
+
+想先確認能不能打包、但不發佈，可以在 GitHub 的 Actions 頁面手動執行 `Publish Extension`，勾選 `dry_run`。
+
+#### C. 發佈到市集（選用）
+
+需要先在 Visual Studio Marketplace 建立名為 `kalpy` 的 publisher，並在 repo 的 Settings → Secrets 設定 `VSCE_PAT`（Open VSX 則是 `OVSX_PAT`）。沒有設定的話，workflow 會跳過市集發佈，只建立 GitHub Release。
+
 ### 基本操作
 
 | 想做的事 | 操作方式 |
