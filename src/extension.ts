@@ -12,6 +12,7 @@ import { LiveTracker } from './liveTracker';
 import store, { type ArticleListItem } from './store';
 import type { IPttClient, FavoriteBoardItem } from './types';
 import logger from './logger';
+import { WebPttClient, isWebClient } from './webClient';
 
 export type { FavoriteBoardItem } from './types';
 
@@ -21,6 +22,8 @@ let pttProvider: PttTreeDataProvider | PttTreeViewController;
 let pttViewController: PttTreeViewController;
 let contentProvider: ContentProvider;
 let liveTracker: LiveTracker;
+// Last BBS (WebSocket) client, kept so leaving guest mode can reuse its connection
+let bbsClient: IPttClient | undefined;
 
 function intializePttClient (timeoutMs = 5000): Promise<IPttClient> {
   return new Promise(resolve => {
@@ -40,6 +43,15 @@ function intializePttClient (timeoutMs = 5000): Promise<IPttClient> {
 }
 
 let pttClientFactory = intializePttClient;
+let webClientFactory: () => IPttClient = () => new WebPttClient();
+
+export function setWebClientFactory (factory: () => IPttClient) {
+  webClientFactory = factory;
+}
+
+export function isGuestMode (): boolean {
+  return isWebClient(ptt);
+}
 
 export function setPttClientFactory (factory: (timeoutMs?: number) => Promise<IPttClient>) {
   pttClientFactory = factory;
@@ -99,6 +111,9 @@ export function wrapPttWithQueue(client: IPttClient): IPttClient {
 
 export function setPttClient (client: IPttClient) {
   const queuedClient = wrapPttWithQueue(client);
+  if (client && !isWebClient(client)) {
+    bbsClient = queuedClient;
+  }
   ptt = queuedClient;
   (pttProvider as any)?.setPtt?.(queuedClient);
   pttViewController?.setPtt?.(queuedClient);
@@ -154,7 +169,15 @@ let activeConnectPromise: Promise<boolean> | null = null;
 let activeLoginPromise: Promise<boolean> | null = null;
 
 export async function ensureConnectedPttClient (): Promise<boolean> {
-  if (ptt?.state?.connect) {
+  if (ptt?.state?.connect && !isWebClient(ptt)) {
+    return true;
+  }
+  if (isWebClient(ptt) && bbsClient?.state?.connect) {
+    ptt = bbsClient;
+    (pttProvider as any)?.setPtt?.(bbsClient);
+    pttViewController?.setPtt?.(bbsClient);
+    contentProvider?.setPtt?.(bbsClient);
+    updateLoginContext();
     return true;
   }
   if (activeConnectPromise) {
@@ -236,22 +259,67 @@ export async function login (silent = false): Promise<boolean> {
   return activeLoginPromise;
 }
 
-async function performLogin (isSilent: boolean): Promise<boolean> {
-  // Ensure ptt client is connected
-  const connected = await ensureConnectedPttClient();
-  if (!connected) {
+function clearFavoritesIfUserChanged (username: string) {
+  const previous = ctx?.globalState?.get<string>('username');
+  if (previous && previous.toLowerCase() !== username.toLowerCase()) {
+    store.clearFavorites();
+    ctx.globalState.update('cachedFavorites', []);
+  }
+}
+
+/**
+ * PTT rejects `guest` over the BBS interface ("請改用網頁版"), so guest mode switches to a
+ * read-only client that scrapes https://www.ptt.cc instead.
+ */
+async function loginAsGuest (isSilent: boolean): Promise<boolean> {
+  const webClient = webClientFactory();
+  let success = false;
+  try {
+    success = Boolean(await webClient.login());
+  } catch (err) {
+    logger.error('[GuestLogin] Failed to reach www.ptt.cc:', err);
+  }
+
+  if (!success) {
+    updateLoginContext();
     if (!isSilent) {
-      vscode.window.showWarningMessage('無法連線至 PTT 伺服器，請稍後再試。');
+      vscode.window.showWarningMessage('無法連線至 PTT 網頁版 (www.ptt.cc)，請稍後再試。');
     }
     return false;
   }
 
+  clearFavoritesIfUserChanged('guest');
+  setPttClient(webClient);
+  ctx.globalState.update('username', 'guest');
+  ctx.globalState.update('password', '');
+  updateLoginContext();
+  refreshTreeView();
+  if (!isSilent) {
+    vscode.window.showInformationMessage('以訪客身分登入（網頁版唯讀模式，「我的最愛」顯示熱門看板）');
+  }
+  return true;
+}
+
+async function performLogin (isSilent: boolean): Promise<boolean> {
   let { username, password } = await getLoginCredential(isSilent);
 
   const isGuest = username?.toLowerCase() === 'guest';
   if (!username || (password === undefined && !isGuest)) {
     if (!isSilent) {
       vscode.window.showWarningMessage('需要帳密才能使用 VSCode PTT 噢！');
+    }
+    return false;
+  }
+
+  if (isGuest) {
+    return loginAsGuest(isSilent);
+  }
+
+  // Ensure ptt client is connected
+  const connected = await ensureConnectedPttClient();
+  if (!connected) {
+    if (!isSilent) {
+      vscode.window.showWarningMessage('無法連線至 PTT 伺服器，請稍後再試。');
     }
     return false;
   }
@@ -281,6 +349,9 @@ async function performLogin (isSilent: boolean): Promise<boolean> {
     });
 
     if (freshUsername) {
+      if (freshUsername.toLowerCase() === 'guest') {
+        return loginAsGuest(isSilent);
+      }
       let freshPassword = '';
       if (freshUsername.toLowerCase() !== 'guest') {
         const inputPass = await vscode.window.showInputBox({
@@ -301,6 +372,7 @@ async function performLogin (isSilent: boolean): Promise<boolean> {
   }
 
   if (success) {
+    clearFavoritesIfUserChanged(username);
     ctx.globalState.update('username', username);
     ctx.globalState.update('password', password ?? '');
     updateLoginContext();
@@ -402,7 +474,9 @@ export async function activate(context: vscode.ExtensionContext) {
       store.clearAll();
       refreshTreeView();
 
-      if (checkLogin()) {
+      if (isWebClient(ptt)) {
+        await (ptt as WebPttClient).logout();
+      } else if (checkLogin()) {
         await ptt.send(`${key.ArrowLeft.repeat(10)}${key.ArrowRight}y${key.Enter}`);
         ptt._state.login = false;
       }

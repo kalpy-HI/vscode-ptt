@@ -17,11 +17,16 @@ flowchart LR
 
   subgraph CLIENT["packages/ptt-client"]
     BOT["bot.ts<br/>login / getFavorite / getArticles / getArticle"]
+  end
+
+  subgraph WEB["訪客模式"]
+    WC["webClient.ts<br/>爬取 www.ptt.cc 網頁版 (唯讀)"]
     TERM["terminal/<br/>解析 BBS 畫面"]
     SOCK["socket.ts<br/>WebSocket"]
   end
 
   PTT[("wss://ws.ptt.cc/bbs")]
+  WWW[("https://www.ptt.cc/bbs")]
 
   EXT --> TREE & FS & HOVER & LIVE
   EXT <--> GS
@@ -30,6 +35,7 @@ flowchart LR
   LIVE --> FS
   BOT --> TERM
   BOT <--> SOCK <--> PTT
+  Q -. 帳號為 guest .-> WC <--> WWW
 ```
 
 ## 二、啟動與登入流程
@@ -41,17 +47,21 @@ flowchart TD
   C --> D[建立 PTT client 並連線 term.ptt.cc<br/>逾時 5 秒]
   D --> E[建立 TreeView、ptt:// FileSystemProvider、<br/>HoverProvider、LiveTracker，註冊指令]
   E --> F["靜默登入 login(silent=true)"]
-  F --> G{已連線?}
-  G -- 否 --> X[維持未登入<br/>側邊欄顯示「登入」按鈕]
-  G -- 是 --> H{globalState 有帳密?}
-  H -- 否 --> X
-  H -- 是 --> I["ptt.login(帳號, 密碼, kickLogin)<br/>逾時 15 秒"]
+  F --> H{globalState 有帳密?}
+  H -- 否 --> X[維持未登入<br/>側邊欄顯示「登入」按鈕]
+  H -- 帳號為 guest --> GW
+  H -- 一般帳號 --> G{已連線 BBS?}
+  G -- 否 --> X
+  G -- 是 --> I["ptt.login(帳號, 密碼, kickLogin)<br/>逾時 15 秒"]
+  GW["改用 WebPttClient<br/>連 www.ptt.cc (帶 over18 cookie)"] -- 成功 --> J
+  GW -- 失敗 --> X
   I -- 成功 --> J[設定 ptt:loggedIn = true<br/>刷新 TreeView]
   I -- 失敗 --> X
 
   X --> M([使用者點「登入」/ PTT: 登入])
-  M --> N[輸入帳號<br/>guest 會被伺服器拒絕]
-  N --> O[輸入密碼]
+  M --> N[輸入帳號]
+  N -- guest --> GW
+  N -- 一般帳號 --> O[輸入密碼]
   O --> P[ptt.login]
   P -- 成功 --> Q[儲存帳密至 globalState<br/>顯示「以 xxx 登入成功！」] --> J
   P -- 失敗 --> R[要求重新輸入一次帳密] --> P2[再次 ptt.login]
@@ -134,11 +144,12 @@ pnpm package
 code --install-extension vscode-ptt-0.4.1.vsix --force
 ```
 
+這個 Fork 的擴充功能 ID 是 `kalpy.vscode-ptt`（原版為 `Yukai.vscode-ptt`），兩者可以同時存在，市集的自動更新也不會覆蓋它。建議先在擴充功能面板停用或解除安裝原版，免得兩個側邊欄同時出現。
+
 也可以在 VS Code 擴充功能面板右上角 `⋯` → **從 VSIX 安裝…** 選這個檔案。安裝後重新載入視窗，左側活動列會出現 PTT 圖示。
 
 注意事項：
 
-- 自己打包的版本和市集版的 ID 一樣，都是 `Yukai.vscode-ptt`。如果裝過市集版，`.vsix` 會直接覆蓋它；但市集出新版時，自動更新可能又把它換回市集版。可以在該擴充功能的齒輪選單取消「自動更新」，或把 `package.json` 的 `publisher`／`name` 改成自己的，讓兩者完全分開。
 - `package.json` 指定的是 `pnpm@12`。如果你的 pnpm 版本切換失敗，可以用 `mise install` 裝指定版本，或在 `~/.npmrc` 加上 `manage-package-manager-versions=false`，改用本機的 pnpm 10。
 - 改完程式碼後重新執行 `pnpm package`，再用同一行 `code --install-extension ... --force` 覆蓋安裝即可。
 
@@ -146,7 +157,8 @@ code --install-extension vscode-ptt-0.4.1.vsix --force
 
 | 想做的事 | 操作方式 |
 | --- | --- |
-| 登入 | 側邊欄「登入」按鈕，或指令面板 `PTT: 登入`。帳密會記住，下次啟動自動登入。**訪客（guest）無法使用**：PTT 伺服器會回「請改用網頁版」並中斷連線，必須用註冊帳號 |
+| 登入 | 側邊欄「登入」按鈕，或指令面板 `PTT: 登入`。帳密會記住，下次啟動自動登入 |
+| 訪客模式 | 帳號輸入 `guest`（不用密碼）。PTT 的 BBS 介面拒絕 guest，所以這個模式改為讀取網頁版 www.ptt.cc：可以瀏覽看板與文章、以推文數搜尋、即時追推文；「我的最愛」會改顯示熱門看板。只能看、不能推文或發文，網頁版沒有的看板也看不到 |
 | 訂閱看板 | 側邊欄標題列 `＋`，輸入看板名稱（如 `C_Chat`、`Gossiping`） |
 | 從我的最愛訂閱 | 「我的最愛」會自動列出你 PTT 帳號的最愛看板；也可用指令 `ptt.favorite-board` 挑選加入「其他看板」 |
 | 看文章 | 展開看板 → 點文章標題，於編輯器以唯讀方式開啟 |
