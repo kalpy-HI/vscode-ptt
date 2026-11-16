@@ -8,11 +8,11 @@ flowchart LR
     EXT["extension.ts<br/>啟動、指令註冊、登入流程"]
     TREE["views/PttTreeView.tsx<br/>側邊欄「文章列表」(React TreeView)"]
     FS["provider.ts<br/>ptt:// 唯讀檔案系統"]
-    HOVER["hoverProvider.ts<br/>圖片 / Imgur 懸浮預覽"]
+    HOVER["hoverProvider.ts + linkPreview.ts<br/>圖片 / 外部連結懸浮預覽"]
     LIVE["liveTracker.ts<br/>即時追推文 (定時刷新)"]
     STORE["store.ts<br/>文章列表 / 我的最愛快取"]
     Q["PttQueue<br/>序列化所有 PTT 請求"]
-    GS[("globalState<br/>帳密、boardlist、cachedFavorites")]
+    GS[("globalState<br/>帳密、登入模式、本地喜愛看板（同步）、cachedFavorites")]
   end
 
   subgraph CLIENT["packages/ptt-client"]
@@ -47,9 +47,10 @@ flowchart TD
   C --> D[建立 PTT client 並連線 term.ptt.cc<br/>逾時 5 秒]
   D --> E[建立 TreeView、ptt:// FileSystemProvider、<br/>HoverProvider、LiveTracker，註冊指令]
   E --> F["靜默登入 login(silent=true)"]
-  F --> H{globalState 有帳密?}
-  H -- 否 --> X[維持未登入<br/>側邊欄顯示「登入」按鈕]
-  H -- 帳號為 guest --> GW
+  F --> LM{上次是訪客模式?<br/>loginMode == guest}
+  LM -- 是 --> GW
+  LM -- 否 --> H{globalState 有帳密?}
+  H -- 否 --> X[維持未登入<br/>側邊欄顯示「以帳號登入」與<br/>「以訪客身分瀏覽」兩個按鈕]
   H -- 一般帳號 --> G{已連線 BBS?}
   G -- 否 --> X
   G -- 是 --> I["ptt.login(帳號, 密碼, kickLogin)<br/>逾時 15 秒"]
@@ -58,10 +59,10 @@ flowchart TD
   I -- 成功 --> J[設定 ptt:loggedIn = true<br/>刷新 TreeView]
   I -- 失敗 --> X
 
-  X --> M([使用者點「登入」/ PTT: 登入])
+  X --> GB([點「以訪客身分瀏覽」<br/>PTT: 以訪客身分瀏覽]) --> GW
+  X --> M([點「以帳號登入」<br/>PTT: 以帳號登入])
   M --> N[輸入帳號]
-  N -- guest --> GW
-  N -- 一般帳號 --> O[輸入密碼]
+  N --> O[輸入密碼]
   O --> P[ptt.login]
   P -- 成功 --> Q[儲存帳密至 globalState<br/>顯示「以 xxx 登入成功！」] --> J
   P -- 失敗 --> R[要求重新輸入一次帳密] --> P2[再次 ptt.login]
@@ -74,13 +75,16 @@ flowchart TD
 ```mermaid
 flowchart TD
   A([側邊欄「文章列表」]) --> B{已登入?}
-  B -- 否 --> L[「尚未登入 PTT」→ 點擊登入]
-  B -- 是 --> C[我的最愛<br/>ptt.getFavorite，結果快取]
-  B -- 是 --> D[其他看板<br/>globalState.boardlist]
+  B -- 否 --> L[「以帳號登入」/「以訪客身分瀏覽」]
+  B -- 是 --> D[❤ 本地喜愛看板<br/>存在本機、帳號與訪客共用、<br/>登出不清除、透過設定同步帶到其他電腦]
+  B -- 是 --> C[我的最愛（訪客為「熱門看板」）<br/>ptt.getFavorite，結果快取]
 
-  D --> D1["＋ 新增訂閱看板<br/>輸入看板名 → enterBoard 檢查存在"]
-  D1 -- 存在 --> D2[加入 boardlist]
+  D --> D1["＋ 新增本地喜愛看板<br/>輸入看板名 → enterBoard 檢查存在"]
+  D1 -- 存在 --> D2[加入本地喜愛看板]
   D1 -- 不存在 --> D3[「此看板不存在」]
+  C -- 看板旁 ❤ --> D2
+  C -- 標題旁「全部加入」--> D2
+  D -- 匯出 / 匯入 --> D4[(JSON 備份檔)]
 
   C & D --> E[展開看板]
   E --> F[ptt.getArticles 取最新 20 篇<br/>存入 store]
@@ -96,7 +100,7 @@ flowchart TD
 
   E -- 右鍵 --> R1[重新整理此看板文章]
   E -- 右鍵 --> R2["以推文數搜尋<br/>輸入 0~100 → setSearchCondition('push')"] --> F
-  E -- 右鍵 --> R3[移除訂閱看板]
+  E -- 右鍵（本地喜愛看板）--> R3[從本地喜愛看板移除]
 ```
 
 ## 四、即時追推文 (Live Tracking)
@@ -197,18 +201,20 @@ code --install-extension vscode-ptt.vsix --force
 
 | 想做的事 | 操作方式 |
 | --- | --- |
-| 登入 | 側邊欄「登入」按鈕，或指令面板 `PTT: 登入`。帳密會記住，下次啟動自動登入 |
-| 訪客模式 | 帳號輸入 `guest`（不用密碼）。PTT 的 BBS 介面拒絕 guest，所以這個模式改為讀取網頁版 www.ptt.cc：可以瀏覽看板與文章、以推文數搜尋、即時追推文；「我的最愛」會改顯示熱門看板。只能看、不能推文或發文，網頁版沒有的看板也看不到 |
-| 訂閱看板 | 側邊欄標題列 `＋`，輸入看板名稱（如 `C_Chat`、`Gossiping`） |
-| 從我的最愛訂閱 | 「我的最愛」會自動列出你 PTT 帳號的最愛看板；也可用指令 `ptt.favorite-board` 挑選加入「其他看板」 |
+| 以帳號登入 | 側邊欄「以帳號登入」（標題列 🔑），或指令面板 `PTT: 以帳號登入`。帳密會記住，下次啟動自動登入。在訪客模式中按這個鈕會切換回帳號 |
+| 以訪客身分瀏覽 | 側邊欄「以訪客身分瀏覽」（標題列 👁），或指令面板 `PTT: 以訪客身分瀏覽（唯讀）`。不需要帳號，改讀網頁版 www.ptt.cc：可以瀏覽看板與文章、以推文數搜尋、即時追推文；側邊欄的「我的最愛」會換成「熱門看板」。只能看、不能推文或發文。切到訪客模式不會刪掉記住的帳密；下次啟動會沿用上次的模式 |
+| 本地喜愛看板 | 存在這台電腦的看板清單，帳號與訪客模式共用，登出、換帳號、PTT 帳號消失都不會不見。開啟 VS Code「設定同步」時會自動帶到其他電腦 |
+| 新增本地喜愛看板 | 標題列 `＋` 或「本地喜愛看板」旁的 `＋`，輸入看板名稱（如 `C_Chat`） |
+| 從我的最愛／熱門看板加入 | 看板旁的 ❤ 加入單一看板；「我的最愛」/「熱門看板」標題旁的 ☁ 一次全部加入（等於把 PTT 帳號的我的最愛備份到本機） |
+| 匯出／匯入 | 標題列 `⋯` →「匯出本地喜愛看板」存成 JSON；換電腦後「匯入本地喜愛看板」選那個檔案（也接受一行一個看板名稱的文字檔），重複的看板會自動略過 |
 | 看文章 | 展開看板 → 點文章標題，於編輯器以唯讀方式開啟 |
 | 載入更舊文章 | 看板底部「載入更多文章」 |
 | 以推文數篩選 | 看板右鍵 → 「以推文數搜尋」，輸入 0~100 |
 | 重新整理 | 看板右側 🔄 重新整理該看板；標題列 🔄 重新整理看板列表與我的最愛（同時清除推文數篩選） |
-| 移除看板 | 看板右鍵 → 「移除訂閱看板」 |
+| 移除看板 | 本地喜愛看板裡的看板右鍵 → 「從本地喜愛看板移除」 |
 | 即時追推文 | 開啟文章後按編輯器右上角 📡（或 `PTT: 切換即時追推文`），再按 ⏹ 停止 |
-| 圖片預覽 | 滑鼠停在文章中的 imgur / 圖片網址上 |
-| 登出 | 標題列登出按鈕（會一併清除帳密與訂閱看板） |
+| 圖片與連結預覽 | 滑鼠停在文章中的網址上：圖片網址直接顯示圖片；其他連結顯示網頁的縮圖、標題與摘要（YouTube 顯示影片縮圖） |
+| 登出 | 標題列登出按鈕（清除記住的帳密；本地喜愛看板保留） |
 
 ### 設定 (settings.json)
 
@@ -216,6 +222,7 @@ code --install-extension vscode-ptt.vsix --force
 | --- | --- | --- |
 | `kickLogin` | `false` | 登入時踢掉其他重複登入 |
 | `previewImages` | `true` | 懸浮提示中預覽圖片 |
+| `previewLinks` | `true` | 懸浮預覽外部連結的縮圖、標題與摘要 |
 | `previewImageWidth` | `320` | 預覽寬度（px，0 為不限制） |
 | `liveTrackingInterval` | `3` | 即時追推文刷新秒數（1~60） |
 | `liveTrackingAutoScroll` | `true` | 追推文時自動捲到底 |

@@ -9,7 +9,9 @@ import {
   setExtensionContext,
   setPttProvider,
   setWebClientFactory,
-  isGuestMode
+  isGuestMode,
+  loginAsGuestCommand,
+  loginWithAccountCommand
 } from '../../extension';
 import { WebPttClient } from '../../webClient';
 import { MockPttClient } from './mockPttClient';
@@ -160,8 +162,7 @@ describe('Login Unit Tests', () => {
       await login(false);
 
       assert.strictEqual(checkLogin(), true);
-      assert.strictEqual(globalStore['username'], 'guest');
-      assert.strictEqual(globalStore['password'], '');
+      assert.strictEqual(globalStore['loginMode'], 'guest');
       assert.strictEqual(isGuestMode(), true, 'guest should use the web client');
       assert.ok(messages.info.some(msg => msg.includes('以訪客身分登入')));
     });
@@ -202,12 +203,88 @@ describe('Login Unit Tests', () => {
       // simulate logout of the guest session
       globalStore['username'] = 'realuser';
       globalStore['password'] = 'pw';
+      globalStore['loginMode'] = undefined;
       setPttClient(new WebPttClient(async () => ({ status: 200, ok: true, text: async () => '' })));
 
       const ok = await login(true);
 
       assert.strictEqual(ok, true);
       assert.strictEqual(isGuestMode(), false);
+    });
+
+    it('guest button logs in as guest without touching saved account credentials', async () => {
+      globalStore['username'] = 'realuser';
+      globalStore['password'] = 'pw';
+
+      const ok = await loginAsGuestCommand();
+
+      assert.strictEqual(ok, true);
+      assert.strictEqual(isGuestMode(), true);
+      assert.strictEqual(globalStore['username'], 'realuser');
+      assert.strictEqual(globalStore['password'], 'pw');
+      assert.strictEqual(globalStore['loginMode'], 'guest');
+    });
+
+    it('restarts in guest mode when the last session was a guest, even with saved credentials', async () => {
+      globalStore['username'] = 'realuser';
+      globalStore['password'] = 'pw';
+      globalStore['loginMode'] = 'guest';
+
+      await login(true);
+
+      assert.strictEqual(isGuestMode(), true);
+    });
+
+    it('asks before switching an account session to guest mode', async () => {
+      mockPtt.state.login = true;
+      globalStore['username'] = 'realuser';
+      let answer: string | undefined;
+      mockVscode.window.showWarningMessage = async (msg: string) => {
+        messages.warning.push(msg);
+        return answer;
+      };
+
+      answer = undefined;
+      assert.strictEqual(await loginAsGuestCommand(), false);
+      assert.strictEqual(isGuestMode(), false, 'cancelling keeps the account session');
+
+      answer = '切換到訪客模式';
+      assert.strictEqual(await loginAsGuestCommand(), true);
+      assert.strictEqual(isGuestMode(), true);
+      assert.strictEqual(mockPtt.state.login, false, 'BBS session is logged out');
+    });
+
+    it('account button switches from guest mode to the saved account', async () => {
+      globalStore['username'] = 'realuser';
+      globalStore['password'] = 'pw';
+      await loginAsGuestCommand();
+      assert.strictEqual(isGuestMode(), true);
+
+      const ok = await loginWithAccountCommand();
+
+      assert.strictEqual(ok, true);
+      assert.strictEqual(isGuestMode(), false);
+      assert.strictEqual(globalStore['loginMode'], 'account');
+    });
+
+    it('stays in guest mode when switching to an account fails', async () => {
+      await loginAsGuestCommand();
+      mockPtt.login = async () => false;
+      mockVscode.window.showInputBox = async (options: any) => {
+        if (options.placeHolder === '帳號') {
+          return 'realuser';
+        }
+        if (options.placeHolder === '密碼') {
+          return 'wrong';
+        }
+        return undefined;
+      };
+
+      const ok = await loginWithAccountCommand();
+
+      assert.strictEqual(ok, false);
+      assert.strictEqual(isGuestMode(), true);
+      assert.strictEqual(checkLogin(), true);
     });
 
     it('successfully logs in with normal account', async () => {
@@ -322,12 +399,10 @@ describe('Login Unit Tests', () => {
     });
 
     it('updates ptt:loggedIn context key on login state change', async () => {
-      let contextKey = '';
-      let contextValue: any = null;
+      const contextKeys: Record<string, unknown> = {};
       mockVscode.commands.executeCommand = async (cmd: string, key: string, val: any) => {
         if (cmd === 'setContext') {
-          contextKey = key;
-          contextValue = val;
+          contextKeys[key] = val;
         }
       };
 
@@ -343,8 +418,8 @@ describe('Login Unit Tests', () => {
 
       await login(false);
 
-      assert.strictEqual(contextKey, 'ptt:loggedIn');
-      assert.strictEqual(contextValue, true);
+      assert.strictEqual(contextKeys['ptt:loggedIn'], true);
+      assert.strictEqual(contextKeys['ptt:guestMode'], false);
     });
 
     it('deduplicates concurrent login calls and awaits single in-flight attempt', async () => {

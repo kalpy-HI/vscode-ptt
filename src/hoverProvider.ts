@@ -1,3 +1,4 @@
+import { LinkPreviewService, type LinkPreview } from './linkPreview';
 import * as vscode from 'vscode';
 
 const RESERVED_IMGUR_PATHS = new Set([
@@ -106,34 +107,103 @@ export function extractUrlsWithRange(lineText: string, lineIndex: number): Array
   return results;
 }
 
+function escapeAttr(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function imageMarkdown(imageUrl: string, width: number): string {
+  return width > 0
+    ? `<img src="${escapeAttr(imageUrl)}" width="${width}" />`
+    : `![](${imageUrl.replace(/[()\s]/g, encodeURIComponent)})`;
+}
+
+export function buildLinkPreviewMarkdown(preview: LinkPreview, width: number): vscode.MarkdownString {
+  // Page metadata is untrusted: no command links, and text is escaped.
+  const markdown = new vscode.MarkdownString('', false);
+  markdown.isTrusted = false;
+  markdown.supportHtml = true;
+  markdown.appendMarkdown(`[${escapeMarkdownLinkText(preview.url)}](${preview.url.replace(/[()\s]/g, encodeURIComponent)})\n\n`);
+  if (preview.title) {
+    markdown.appendMarkdown('**');
+    markdown.appendText(preview.title);
+    markdown.appendMarkdown('**');
+    if (preview.siteName) {
+      markdown.appendMarkdown(' · ');
+      markdown.appendText(preview.siteName);
+    }
+    markdown.appendMarkdown('\n\n');
+  }
+  if (preview.description) {
+    markdown.appendText(preview.description);
+    markdown.appendMarkdown('\n\n');
+  }
+  if (preview.image) {
+    markdown.appendMarkdown(imageMarkdown(preview.image, width));
+  }
+  return markdown;
+}
+
+function escapeMarkdownLinkText(text: string): string {
+  return text.replace(/([\\[\]*_`])/g, '\\$1');
+}
+
+/** Pages without og:image (e.g. PTT articles) often mention an image link in their description. */
+export function withImageFromDescription(preview: LinkPreview): LinkPreview {
+  if (preview.image || !preview.description) {
+    return preview;
+  }
+  for (const { url } of extractUrlsWithRange(preview.description, 0)) {
+    const image = getImagePreviewUrl(url);
+    if (image) {
+      return { ...preview, image };
+    }
+  }
+  return preview;
+}
+
 export default class PttHoverProvider implements vscode.HoverProvider {
+  constructor(private linkPreviews: LinkPreviewService = new LinkPreviewService()) {}
+
   public provideHover(
     document: vscode.TextDocument,
     position: vscode.Position,
-    _token?: vscode.CancellationToken
+    token?: vscode.CancellationToken
   ): vscode.ProviderResult<vscode.Hover> {
-    const isEnabled = vscode.workspace.getConfiguration().get<boolean>('previewImages') ?? true;
+    const config = vscode.workspace.getConfiguration();
+    const isEnabled = config.get<boolean>('previewImages') ?? true;
     if (!isEnabled) {
       return null;
     }
 
     const lineText = document.lineAt(position.line).text;
     const urls = extractUrlsWithRange(lineText, position.line);
+    const previewWidth = config.get<number>('previewImageWidth') ?? 320;
 
     for (const item of urls) {
       if (position.character >= item.range.start.character && position.character <= item.range.end.character) {
         const previewUrl = getImagePreviewUrl(item.url);
         if (previewUrl) {
-          const previewWidth = vscode.workspace.getConfiguration().get<number>('previewImageWidth') ?? 320;
-          const imageContent = previewWidth > 0
-            ? `<img src="${previewUrl}" width="${previewWidth}" />`
-            : `![](${previewUrl})`;
+          const imageContent = imageMarkdown(previewUrl, previewWidth);
 
           const markdown = new vscode.MarkdownString(`[${item.url}](${item.url})\n\n${imageContent}`);
           markdown.isTrusted = true;
           markdown.supportHtml = true;
           return new vscode.Hover(markdown, item.range);
         }
+
+        const linkPreviewEnabled = config.get<boolean>('previewLinks') ?? true;
+        if (!linkPreviewEnabled) {
+          return null;
+        }
+        return this.linkPreviews
+          .get(item.url, () => Boolean(token?.isCancellationRequested))
+          .then(found => {
+            const preview = found ? withImageFromDescription(found) : found;
+            if (!preview || token?.isCancellationRequested || (!preview.image && !preview.title)) {
+              return null;
+            }
+            return new vscode.Hover(buildLinkPreviewMarkdown(preview, previewWidth), item.range);
+          });
       }
     }
 

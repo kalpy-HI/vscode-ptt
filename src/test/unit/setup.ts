@@ -101,6 +101,10 @@ export const mockVscode = {
       this.value += s;
       return this;
     }
+    appendText(s: string) {
+      this.value += s.replace(/[\\`*_{}[\]()#+\-.!<>|]/g, '\\$&');
+      return this;
+    }
     toString() {
       return this.value;
     }
