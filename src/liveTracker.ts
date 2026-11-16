@@ -20,7 +20,7 @@ export class LiveTracker implements vscode.Disposable {
     private checkLogin: () => boolean
   ) {
     this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-    this.statusBarItem.command = 'ptt.toggle-live-tracking';
+    this.statusBarItem.command = 'kalpy.ptt.toggle-live-tracking';
     this.disposables.push(this.statusBarItem);
 
     this.disposables.push(
@@ -61,7 +61,7 @@ export class LiveTracker implements vscode.Disposable {
       return null;
     }
     // Support ptt scheme URIs
-    if (uri.scheme !== 'ptt') {
+    if (uri.scheme !== 'kalpy-ptt') {
       return null;
     }
     const cleanPath = uri.path.replace(/^\//, '');
@@ -223,7 +223,7 @@ export class LiveTracker implements vscode.Disposable {
     const key = this.getKeyFromUri(uri);
     const isTracking = Boolean(key && this.activeSessions.has(key));
 
-    vscode.commands.executeCommand('setContext', 'ptt:isLiveTracking', isTracking);
+    vscode.commands.executeCommand('setContext', 'kalpyPtt:isLiveTracking', isTracking);
 
     if (isTracking && key) {
       const intervalSec = Math.max(1, vscode.workspace.getConfiguration().get<number>('liveTrackingInterval') ?? 3);

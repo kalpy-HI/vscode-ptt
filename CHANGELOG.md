@@ -4,7 +4,8 @@
 
 ### Changed
 
-- 擴充功能 ID 改為 `kalpy.vscode-ptt`，市集自動更新不會覆蓋；但指令與側邊欄和原版相同，需先停用原版（偵測到原版時會提示並停止啟動）
+- 擴充功能 ID 改為 `kalpy.vscode-ptt`，市集自動更新不會覆蓋
+- 指令、側邊欄、狀態鍵與文章網址都加上 `kalpy` 前綴（`kalpy.ptt.*`、`kalpyPttTree`、`kalpy-ptt:`），可與原版同時安裝；側邊欄標題改為「VSCode PTT (kalpy)」
 
 ### Added
 

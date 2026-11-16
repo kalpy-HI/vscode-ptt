@@ -67,7 +67,7 @@ export class ArticleChildren implements IChildren
         `${article.push} ${article.status} ${article.title}`,
         vscode.TreeItemCollapsibleState.None,
         {
-          command: 'ptt.show-article',
+          command: 'kalpy.ptt.show-article',
           title: '',
           arguments: [article.sn, boardname]
         }
@@ -159,7 +159,7 @@ class LoadMoreArticle extends vscode.TreeItem {
     super('載入更多文章', vscode.TreeItemCollapsibleState.None);
 
     this.command = {
-      command: 'ptt.load-more-article',
+      command: 'kalpy.ptt.load-more-article',
       title: '',
       arguments: [boardname]
     };

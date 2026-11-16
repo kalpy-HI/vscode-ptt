@@ -68,8 +68,8 @@ export function setPttClientFactory (factory: (timeoutMs?: number) => Promise<IP
 
 export function updateLoginContext () {
   const loggedIn = checkLogin();
-  vscode.commands.executeCommand('setContext', 'ptt:loggedIn', loggedIn);
-  vscode.commands.executeCommand('setContext', 'ptt:guestMode', loggedIn && isWebClient(ptt));
+  vscode.commands.executeCommand('setContext', 'kalpyPtt:loggedIn', loggedIn);
+  vscode.commands.executeCommand('setContext', 'kalpyPtt:guestMode', loggedIn && isWebClient(ptt));
 }
 
 export function refreshTreeView () {
@@ -496,41 +496,10 @@ function setSearchCondition(type: string, criteria: string): void
   ptt.setSearchCondition(type, criteria);
 }
 
-export const ORIGINAL_EXTENSION_ID = 'Yukai.vscode-ptt';
-
-/**
- * The fork keeps the original's command ids, view ids and `ptt:` scheme, so both cannot run
- * together: whichever activates second fails while registering. Detect that and tell the
- * user instead of failing silently.
- */
-export function findConflictingExtension (): vscode.Extension<unknown> | undefined {
-  const self = ctx?.extension?.id?.toLowerCase();
-  const original = vscode.extensions?.getExtension?.(ORIGINAL_EXTENSION_ID);
-  if (!original || original.id.toLowerCase() === self) {
-    return undefined;
-  }
-  return original;
-}
-
 export async function activate(context: vscode.ExtensionContext) {
   ctx = context;
   logger.init();
   logger.log('Extension activating...');
-
-  if (findConflictingExtension()) {
-    logger.error(`[Activate] ${ORIGINAL_EXTENSION_ID} is also enabled; refusing to start to avoid id conflicts.`);
-    const action = await vscode.window.showErrorMessage(
-      '偵測到原版 VSCode 批踢踢（Yukai.vscode-ptt）也在啟用中。兩者的指令與側邊欄相同會互相衝突，請解除安裝或停用原版後重新載入視窗。',
-      '開啟原版擴充功能頁面',
-      '重新載入視窗'
-    );
-    if (action === '開啟原版擴充功能頁面') {
-      await vscode.commands.executeCommand('workbench.extensions.search', `@installed ${ORIGINAL_EXTENSION_ID}`);
-    } else if (action === '重新載入視窗') {
-      await vscode.commands.executeCommand('workbench.action.reloadWindow');
-    }
-    return;
-  }
 
   const persistedFavorites = ctx.globalState.get<FavoriteBoardItem[]>('cachedFavorites');
   if (persistedFavorites && persistedFavorites.length > 0) {
@@ -576,9 +545,9 @@ export async function activate(context: vscode.ExtensionContext) {
   context.globalState.setKeysForSync?.([LOCAL_BOARDS_KEY]);
   const localBoards = new LocalBoards(context.globalState);
 
-  context.subscriptions.push(vscode.commands.registerCommand('ptt.login', () => loginWithAccountCommand()));
-  context.subscriptions.push(vscode.commands.registerCommand('ptt.login-guest', () => loginAsGuestCommand()));
-  context.subscriptions.push(vscode.commands.registerCommand('ptt.logout', async () => {
+  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.login', () => loginWithAccountCommand()));
+  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.login-guest', () => loginAsGuestCommand()));
+  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.logout', async () => {
     const res = await vscode.window.showInformationMessage(
       '你確定要登出嗎？會清除記住的帳密，本地喜愛看板會保留。',
       '好',
@@ -604,7 +573,7 @@ export async function activate(context: vscode.ExtensionContext) {
       vscode.window.showInformationMessage('已登出 PTT');
     }
   }));
-	context.subscriptions.push(vscode.commands.registerCommand('ptt.add-board', async () => {
+	context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.add-board', async () => {
     await login();
 
     if (!checkLogin()) {
@@ -643,7 +612,7 @@ export async function activate(context: vscode.ExtensionContext) {
     refreshTreeView();
   }));
 
-  context.subscriptions.push(vscode.commands.registerCommand('ptt.add-to-local-boards', async (board: unknown) => {
+  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.add-to-local-boards', async (board: unknown) => {
     const boardname = typeof board === 'string' ? board : getBoardNameFromItem(board);
     if (!boardname) {
       return;
@@ -655,7 +624,7 @@ export async function activate(context: vscode.ExtensionContext) {
     refreshTreeView();
   }));
 
-  context.subscriptions.push(vscode.commands.registerCommand('ptt.backup-favorites', async () => {
+  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.backup-favorites', async () => {
     if (!checkLogin()) {
       return;
     }
@@ -686,7 +655,7 @@ export async function activate(context: vscode.ExtensionContext) {
     refreshTreeView();
   }));
 
-  context.subscriptions.push(vscode.commands.registerCommand('ptt.export-local-boards', async () => {
+  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.export-local-boards', async () => {
     const boards = localBoards.list();
     if (boards.length === 0) {
       vscode.window.showInformationMessage('本地喜愛看板是空的，沒有東西可以匯出');
@@ -705,7 +674,7 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.showInformationMessage(`已匯出 ${boards.length} 個本地喜愛看板到 ${target.fsPath}`);
   }));
 
-  context.subscriptions.push(vscode.commands.registerCommand('ptt.import-local-boards', async () => {
+  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.import-local-boards', async () => {
     const picked = await vscode.window.showOpenDialog({
       canSelectMany: false,
       filters: { '看板清單': ['json', 'txt'] },
@@ -729,7 +698,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   }));
 
-  context.subscriptions.push(vscode.commands.registerCommand('ptt.show-article', async (sn, boardname) => {
+  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.show-article', async (sn, boardname) => {
     logger.log(`[ShowArticle] Opening /${boardname}/${sn}.ptt`);
     const uri = vscode.Uri.from({
       scheme: ContentProvider.scheme,
@@ -747,7 +716,7 @@ export async function activate(context: vscode.ExtensionContext) {
     );
   }));
 
-  context.subscriptions.push(vscode.commands.registerCommand('ptt.remove-board', async (board: Board | unknown) => {
+  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.remove-board', async (board: Board | unknown) => {
     const boardname = getBoardNameFromItem(board);
     if (!boardname) {
       return;
@@ -756,11 +725,11 @@ export async function activate(context: vscode.ExtensionContext) {
     refreshTreeView();
   }));
 
-  context.subscriptions.push(vscode.commands.registerCommand('ptt.refresh-article', async () => {
+  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.refresh-article', async () => {
     if (!checkLogin()) {
       return;
     }
-    await vscode.window.withProgress({ location: { viewId: 'pttTree' } }, async () => {
+    await vscode.window.withProgress({ location: { viewId: 'kalpyPttTree' } }, async () => {
       logger.log('[Refresh] Refreshing board list and favorites...');
       store.clearFavorites();
       ctx.globalState.update('cachedFavorites', []);
@@ -769,13 +738,13 @@ export async function activate(context: vscode.ExtensionContext) {
     });
   }));
 
-  context.subscriptions.push(vscode.commands.registerCommand('ptt.refresh-board', async (board?: unknown) => {
+  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.refresh-board', async (board?: unknown) => {
     if (!checkLogin()) {
       return;
     }
     const specificBoard = typeof board === 'string' ? board : getBoardNameFromItem(board);
     if (specificBoard) {
-      await vscode.window.withProgress({ location: { viewId: 'pttTree' } }, async () => {
+      await vscode.window.withProgress({ location: { viewId: 'kalpyPttTree' } }, async () => {
         logger.log(`[RefreshBoard] Refreshing board: ${specificBoard}`);
         contentProvider?.clearCache(specificBoard);
         store.release(specificBoard);
@@ -787,7 +756,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   }));
 
-  context.subscriptions.push(vscode.commands.registerCommand('ptt.load-more-article', async (boardnameOrItem: string | unknown) => {
+  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.load-more-article', async (boardnameOrItem: string | unknown) => {
     const boardname = typeof boardnameOrItem === 'string'
       ? boardnameOrItem
       : getBoardNameFromItem(boardnameOrItem);
@@ -805,7 +774,7 @@ export async function activate(context: vscode.ExtensionContext) {
       return;
     }
 
-    await vscode.window.withProgress({ location: { viewId: 'pttTree' } }, async () => {
+    await vscode.window.withProgress({ location: { viewId: 'kalpyPttTree' } }, async () => {
       const targetSn = lastSn > 0 ? Math.max(lastSn - 1, 1) : 0;
       logger.log(`[LoadMore] Fetching older articles for ${boardname} (target cursor SN: ${targetSn})...`);
       const articles = await ptt.getArticles(boardname, targetSn);
@@ -819,7 +788,7 @@ export async function activate(context: vscode.ExtensionContext) {
     });
   }));
 
-  context.subscriptions.push(vscode.commands.registerCommand('ptt.release-board', async (board: Board | unknown) => {
+  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.release-board', async (board: Board | unknown) => {
     const boardname = getBoardNameFromItem(board);
     if (!boardname) {
       return;
@@ -829,7 +798,7 @@ export async function activate(context: vscode.ExtensionContext) {
     refreshTreeView();
   }));
 
-  context.subscriptions.push(vscode.commands.registerCommand('ptt.search-board-by-push', async (board: Board | unknown) => {
+  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.search-board-by-push', async (board: Board | unknown) => {
     const boardname = getBoardNameFromItem(board);
     if (!boardname) {
       return;
@@ -862,7 +831,7 @@ export async function activate(context: vscode.ExtensionContext) {
   }));
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('ptt.favorite-board', async () => {
+    vscode.commands.registerCommand('kalpy.ptt.favorite-board', async () => {
       const boardName = await pickFavorite();
       if (!boardName) {
         return;
@@ -876,13 +845,13 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(liveTracker);
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('ptt.toggle-live-tracking', async (uri) => liveTracker.toggle(uri))
+    vscode.commands.registerCommand('kalpy.ptt.toggle-live-tracking', async (uri) => liveTracker.toggle(uri))
   );
   context.subscriptions.push(
-    vscode.commands.registerCommand('ptt.start-live-tracking', async (uri) => liveTracker.startTracking(uri))
+    vscode.commands.registerCommand('kalpy.ptt.start-live-tracking', async (uri) => liveTracker.startTracking(uri))
   );
   context.subscriptions.push(
-    vscode.commands.registerCommand('ptt.stop-live-tracking', (uri) => liveTracker.stopTracking(uri))
+    vscode.commands.registerCommand('kalpy.ptt.stop-live-tracking', (uri) => liveTracker.stopTracking(uri))
   );
 
   await login(true);

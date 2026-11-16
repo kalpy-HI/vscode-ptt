@@ -5,7 +5,7 @@ import { MockPttClient } from './mockPttClient';
 
 describe('PttFileSystemProvider Unit Tests', () => {
   it('has scheme "ptt"', () => {
-    assert.strictEqual(PttFileSystemProvider.scheme, 'ptt');
+    assert.strictEqual(PttFileSystemProvider.scheme, 'kalpy-ptt');
   });
 
   it('provides stat for root, board, article and invalid path', async () => {
@@ -13,21 +13,21 @@ describe('PttFileSystemProvider Unit Tests', () => {
     const provider = new PttFileSystemProvider(mockPtt);
 
     // Root
-    const rootStat = provider.stat(vscode.Uri.parse('ptt:/'));
+    const rootStat = provider.stat(vscode.Uri.parse('kalpy-ptt:/'));
     assert.strictEqual(rootStat.type, vscode.FileType.Directory);
 
     // Board
-    const boardStat = provider.stat(vscode.Uri.parse('ptt:/Gossiping'));
+    const boardStat = provider.stat(vscode.Uri.parse('kalpy-ptt:/Gossiping'));
     assert.strictEqual(boardStat.type, vscode.FileType.Directory);
 
     // Article (.ptt)
-    const articleStat = provider.stat(vscode.Uri.parse('ptt:/Gossiping/12345.ptt'));
+    const articleStat = provider.stat(vscode.Uri.parse('kalpy-ptt:/Gossiping/12345.ptt'));
     assert.strictEqual(articleStat.type, vscode.FileType.File);
     assert.strictEqual(articleStat.permissions, vscode.FilePermission.Readonly);
 
     // Invalid path throws
     assert.throws(() => {
-      provider.stat(vscode.Uri.parse('ptt:/Gossiping/12345/extra/invalid'));
+      provider.stat(vscode.Uri.parse('kalpy-ptt:/Gossiping/12345/extra/invalid'));
     });
   });
 
@@ -50,7 +50,7 @@ describe('PttFileSystemProvider Unit Tests', () => {
       return true;
     });
 
-    const uri = vscode.Uri.parse('ptt:/Gossiping/12345.ptt');
+    const uri = vscode.Uri.parse('kalpy-ptt:/Gossiping/12345.ptt');
     const bytes = await provider.readFile(uri);
     const content = new TextDecoder().decode(bytes);
 
@@ -83,7 +83,7 @@ describe('PttFileSystemProvider Unit Tests', () => {
     };
 
     const provider = new PttFileSystemProvider(mockPtt, async () => true);
-    const uri = vscode.Uri.parse('ptt:/Gossiping/12345.ptt');
+    const uri = vscode.Uri.parse('kalpy-ptt:/Gossiping/12345.ptt');
     await provider.readFile(uri);
 
     assert.strictEqual(provider.hasCache('Gossiping', '12345'), true);
@@ -123,13 +123,13 @@ describe('PttFileSystemProvider Unit Tests', () => {
     mockPtt.articleDetails['C_Chat/67890'] = { lines: ['line2'] };
 
     const provider = new PttFileSystemProvider(mockPtt);
-    await provider.readFile(vscode.Uri.parse('ptt:/Gossiping/12345.ptt'));
-    await provider.readFile(vscode.Uri.parse('ptt:/C_Chat/67890.ptt'));
+    await provider.readFile(vscode.Uri.parse('kalpy-ptt:/Gossiping/12345.ptt'));
+    await provider.readFile(vscode.Uri.parse('kalpy-ptt:/C_Chat/67890.ptt'));
 
-    const rootDir = provider.readDirectory(vscode.Uri.parse('ptt:/'));
+    const rootDir = provider.readDirectory(vscode.Uri.parse('kalpy-ptt:/'));
     assert.strictEqual(rootDir.length, 2);
 
-    const gossipingDir = provider.readDirectory(vscode.Uri.parse('ptt:/Gossiping'));
+    const gossipingDir = provider.readDirectory(vscode.Uri.parse('kalpy-ptt:/Gossiping'));
     assert.strictEqual(gossipingDir.length, 1);
     assert.strictEqual(gossipingDir[0][0], '12345.ptt');
   });
@@ -150,7 +150,7 @@ describe('PttFileSystemProvider Unit Tests', () => {
 
     await assert.rejects(
       async () => {
-        await provider.readFile(vscode.Uri.parse('ptt:/Gossiping/12345.ptt'));
+        await provider.readFile(vscode.Uri.parse('kalpy-ptt:/Gossiping/12345.ptt'));
       },
       (err: unknown) => (err as vscode.FileSystemError)?.code === 'Unavailable'
     );

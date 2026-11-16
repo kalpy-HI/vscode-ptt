@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import type { IPttClient } from './types';
 
 export default class PttFileSystemProvider implements vscode.FileSystemProvider {
-  static scheme = 'ptt';
+  static scheme = 'kalpy-ptt';
 
   private _emitter = new vscode.EventEmitter<vscode.FileChangeEvent[]>();
   readonly onDidChangeFile: vscode.Event<vscode.FileChangeEvent[]> = this._emitter.event;
