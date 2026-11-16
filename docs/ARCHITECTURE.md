@@ -156,6 +156,8 @@ pnpm run package:local
 2. 用 VS Code 內建的安裝功能裝上新的 `vscode-ptt.vsix`（和「從 VSIX 安裝…」同一套機制）
 3. 問你要不要重新載入視窗
 
+版本號沒變也會強制覆蓋安裝：先用 VS Code 內建安裝（會取代同版本的資料夾），失敗時改用 VS Code 自帶的 `code --install-extension ... --force`；安裝後也會清掉 `.obsolete` 裡這一版的「已移除」標記，避免下次啟動時被刪掉。完成通知會寫明是「同版本覆蓋」還是「從舊版更新」。
+
 第一次會請你選原始碼資料夾（含 `package.json` 的那一層），之後會記住；如果目前開著的工作區就是原始碼，會自動使用。要換資料夾時執行 **PTT: 從原始碼更新擴充功能（重新選擇資料夾）**。記得先 `git pull` 拿到最新程式碼。
 
 > **不建議在 VS Code 開著時用 `code --install-extension`（或 `pnpm run install:local`）安裝。** 開著的視窗可能把自己記憶中的擴充功能清單（`~/.vscode/extensions/extensions.json`）寫回去，蓋掉剛裝的那一筆，結果資料夾在、`code --list-extensions` 也列得出來，但 VS Code 裡完全看不到。要用指令列安裝，請先關閉所有 VS Code 視窗。

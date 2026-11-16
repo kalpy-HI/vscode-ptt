@@ -137,6 +137,9 @@ export const mockVscode = {
   extensions: {
     getExtension: (_id: string): unknown => undefined
   },
+  env: {
+    appRoot: '/nonexistent/vscode/resources/app'
+  },
   commands: {
     registerCommand: () => ({ dispose: () => {} }),
     executeCommand: async (..._args: unknown[]): Promise<unknown> => undefined

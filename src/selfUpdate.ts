@@ -47,6 +47,90 @@ export async function findSourceFolder(
   return undefined;
 }
 
+/**
+ * VS Code keeps a `.obsolete` JSON map next to the installed extensions; entries listed there
+ * are deleted on the next start. Removes `key` (e.g. `kalpy.vscode-ptt-0.5.0`) from it.
+ */
+export async function clearObsoleteMarker(extensionsDir: string, key: string): Promise<boolean> {
+  const file = path.join(extensionsDir, '.obsolete');
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(await fs.readFile(file, 'utf8')) as Record<string, unknown>;
+  } catch {
+    return false;
+  }
+  const match = Object.keys(data).find(k => k.toLowerCase() === key.toLowerCase());
+  if (!match) {
+    return false;
+  }
+  delete data[match];
+  try {
+    if (Object.keys(data).length === 0) {
+      await fs.rm(file, { force: true });
+    } else {
+      await fs.writeFile(file, JSON.stringify(data));
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Where the `code` command-line launcher of the running VS Code lives. */
+export function cliCandidates(appRoot: string, platform: NodeJS.Platform = process.platform): string[] {
+  const name = platform === 'win32' ? 'code.cmd' : 'code';
+  return [
+    path.join(appRoot, '..', '..', 'bin', name), // Windows / Linux: <install>/resources/app
+    path.join(appRoot, 'bin', name) // macOS: Code.app/Contents/Resources/app/bin/code
+  ];
+}
+
+async function installWithCli(vsixPath: string): Promise<void> {
+  let cli: string | undefined;
+  for (const candidate of cliCandidates(vscode.env.appRoot)) {
+    try {
+      await fs.access(candidate);
+      cli = candidate;
+      break;
+    } catch {
+      // try next
+    }
+  }
+  if (!cli) {
+    throw new Error('找不到 VS Code 的 code 指令');
+  }
+  const { execFile } = await import('node:child_process');
+  await new Promise<void>((resolve, reject) => {
+    execFile(
+      cli as string,
+      ['--install-extension', vsixPath, '--force'],
+      { shell: process.platform === 'win32', windowsHide: true },
+      (err, _stdout, stderr) => (err ? reject(new Error(stderr?.trim() || err.message)) : resolve())
+    );
+  });
+}
+
+/**
+ * Installs the VSIX even when the same version is already installed. VS Code's own installer
+ * replaces the same-version folder; if it refuses, fall back to `code --install-extension
+ * --force`.
+ */
+export async function forceInstallVsix(vsix: vscode.Uri): Promise<'workbench' | 'cli'> {
+  try {
+    await vscode.commands.executeCommand('workbench.extensions.installExtension', vsix);
+    return 'workbench';
+  } catch (err) {
+    try {
+      await installWithCli(vsix.fsPath);
+      return 'cli';
+    } catch (cliErr) {
+      const first = err instanceof Error ? err.message : String(err);
+      const second = cliErr instanceof Error ? cliErr.message : String(cliErr);
+      throw new Error(`${first}；改用指令列 --force 也失敗：${second}`);
+    }
+  }
+}
+
 async function pickSourceFolder(selfId: string): Promise<string | undefined> {
   const picked = await vscode.window.showOpenDialog({
     canSelectFiles: false,
@@ -126,15 +210,27 @@ export async function updateFromSource(context: vscode.ExtensionContext, options
 
   const vsix = vscode.Uri.file(path.join(folder, VSIX_NAME));
   const version = (await readPackageInfo(folder))?.version ?? '';
+  const currentVersion: string | undefined = context.extension?.packageJSON?.version;
+  const sameVersion = Boolean(version) && version === currentVersion;
+
   try {
-    await vscode.commands.executeCommand('workbench.extensions.installExtension', vsix);
+    await forceInstallVsix(vsix);
   } catch (err) {
     vscode.window.showErrorMessage(`安裝失敗：${err instanceof Error ? err.message : String(err)}`);
     return false;
   }
 
+  // A pending "removed" marker for this exact version would make VS Code delete the fresh
+  // install on next start, so drop it.
+  if (context.extensionPath && version) {
+    await clearObsoleteMarker(path.dirname(context.extensionPath), `${selfId}-${version}`);
+  }
+
+  const summary = sameVersion
+    ? `已用同版本 ${version} 強制覆蓋安裝 VSCode PTT (kalpy)`
+    : `VSCode PTT (kalpy) 已從 ${currentVersion ?? '舊版'} 更新到 ${version}`;
   const answer = await vscode.window.showInformationMessage(
-    `VSCode PTT (kalpy) ${version} 已安裝，重新載入視窗後生效。`,
+    `${summary}，重新載入視窗後生效。`,
     '重新載入視窗'
   );
   if (answer === '重新載入視窗') {
