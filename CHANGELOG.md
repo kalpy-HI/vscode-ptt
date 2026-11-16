@@ -1,6 +1,6 @@
 # Change Log
 
-## Unreleased (kalpy fork)
+## 0.5.0 (kalpy fork)
 
 ### Changed
 

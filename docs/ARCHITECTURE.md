@@ -145,7 +145,7 @@ pnpm package
 會在專案根目錄產生 `vscode-ptt-<版本>.vsix`，接著安裝：
 
 ```bash
-code --install-extension vscode-ptt-0.4.1.vsix --force
+code --install-extension vscode-ptt-0.5.0.vsix --force
 ```
 
 這個 Fork 的擴充功能 ID 是 `kalpy.vscode-ptt`（原版為 `Yukai.vscode-ptt`），市集的自動更新不會覆蓋它。Fork 自己註冊的東西都加了 `kalpy` 前綴，可以和原版同時安裝：
