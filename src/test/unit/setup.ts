@@ -10,6 +10,11 @@ export const mockVscode = {
   FilePermission: {
     Readonly: 1
   },
+  ProgressLocation: {
+    SourceControl: 1,
+    Window: 10,
+    Notification: 15
+  },
   FileChangeType: {
     Changed: 1,
     Created: 2,

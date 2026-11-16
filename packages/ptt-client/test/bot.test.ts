@@ -44,6 +44,22 @@ describe('ptt-client Bot & E2E Tests', () => {
     assert.strictEqual(condTitle.toSearchString(), '/test');
   });
 
+  it('builds search strings from explicit conditions, falling back to the global ones', () => {
+    const bot = Object.create(Bot.prototype) as Bot;
+    bot.searchCondition = {
+      conditions: [new Condition('push', '50')],
+      init: () => {},
+      add: () => {}
+    };
+
+    assert.strictEqual(bot.buildSearchString(), 'Z50');
+    assert.strictEqual(
+      bot.buildSearchString([{ type: 'title', criteria: '閒聊' }, { type: 'author', criteria: 'abc' }]),
+      `/閒聊${keymap.Enter}aabc`
+    );
+    assert.strictEqual(bot.buildSearchString([]), '', 'an empty list means no search, ignoring global conditions');
+  });
+
   it('connects to mock server, executes login, and fetches favorites', async function () {
     this.timeout(5000);
     let receivedData = '';

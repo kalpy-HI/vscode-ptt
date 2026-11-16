@@ -35,3 +35,9 @@ export interface PttState {
     boardname: string;
   };
 }
+
+/** title = 標題關鍵字 (/), author = 作者 (a), push = 推文數 (Z) */
+export interface SearchConditionInput {
+  type: 'title' | 'author' | 'push' | string;
+  criteria: string;
+}

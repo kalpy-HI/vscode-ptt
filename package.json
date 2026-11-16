@@ -34,7 +34,8 @@
     "onCommand:kalpy.ptt.toggle-live-tracking",
     "onCommand:kalpy.ptt.start-live-tracking",
     "onCommand:kalpy.ptt.stop-live-tracking",
-    "onView:kalpyPttTree"
+    "onView:kalpyPttTree",
+    "onCommand:kalpy.ptt.search-board"
   ],
   "repository": {
     "type": "git",
@@ -133,9 +134,28 @@
         "icon": "$(trash)"
       },
       {
+        "command": "kalpy.ptt.search-board",
+        "title": "搜尋文章…",
+        "category": "PTT",
+        "icon": "$(search)"
+      },
+      {
+        "command": "kalpy.ptt.search-board-by-keyword",
+        "title": "以標題關鍵字搜尋",
+        "category": "PTT",
+        "icon": "$(search)"
+      },
+      {
         "command": "kalpy.ptt.search-board-by-push",
         "title": "以推文數搜尋",
-        "icon": "$(search)"
+        "category": "PTT",
+        "icon": "$(flame)"
+      },
+      {
+        "command": "kalpy.ptt.clear-board-search",
+        "title": "清除搜尋",
+        "category": "PTT",
+        "icon": "$(clear-all)"
       },
       {
         "command": "kalpy.ptt.refresh-article",
@@ -223,32 +243,32 @@
       "view/item/context": [
         {
           "command": "kalpy.ptt.refresh-board",
-          "when": "view == kalpyPttTree && (viewItem == board || viewItem == remoteBoard)",
+          "when": "view == kalpyPttTree && viewItem =~ /^(board|remoteBoard)(Searching)?$/",
           "group": "inline@1"
         },
         {
           "command": "kalpy.ptt.add-to-local-boards",
-          "when": "view == kalpyPttTree && viewItem == remoteBoard",
+          "when": "view == kalpyPttTree && viewItem =~ /^remoteBoard(Searching)?$/",
           "group": "inline@2"
         },
         {
           "command": "kalpy.ptt.refresh-board",
-          "when": "view == kalpyPttTree && (viewItem == board || viewItem == remoteBoard)",
+          "when": "view == kalpyPttTree && viewItem =~ /^(board|remoteBoard)(Searching)?$/",
           "group": "1_modification@1"
         },
         {
           "command": "kalpy.ptt.search-board-by-push",
-          "when": "view == kalpyPttTree && (viewItem == board || viewItem == remoteBoard)",
+          "when": "view == kalpyPttTree && viewItem =~ /^(board|remoteBoard)(Searching)?$/",
           "group": "1_modification@2"
         },
         {
           "command": "kalpy.ptt.add-to-local-boards",
-          "when": "view == kalpyPttTree && viewItem == remoteBoard",
+          "when": "view == kalpyPttTree && viewItem =~ /^remoteBoard(Searching)?$/",
           "group": "1_modification@3"
         },
         {
           "command": "kalpy.ptt.remove-board",
-          "when": "view == kalpyPttTree && viewItem == board",
+          "when": "view == kalpyPttTree && viewItem =~ /^board(Searching)?$/",
           "group": "1_modification@3"
         },
         {
@@ -275,6 +295,26 @@
           "command": "kalpy.ptt.backup-favorites",
           "when": "view == kalpyPttTree && viewItem == favoriteRoot",
           "group": "1_modification@1"
+        },
+        {
+          "command": "kalpy.ptt.search-board",
+          "when": "view == kalpyPttTree && viewItem =~ /^(board|remoteBoard)(Searching)?$/",
+          "group": "inline@0"
+        },
+        {
+          "command": "kalpy.ptt.clear-board-search",
+          "when": "view == kalpyPttTree && viewItem =~ /Searching$/",
+          "group": "inline@0"
+        },
+        {
+          "command": "kalpy.ptt.search-board-by-keyword",
+          "when": "view == kalpyPttTree && viewItem =~ /^(board|remoteBoard)(Searching)?$/",
+          "group": "1_modification@2"
+        },
+        {
+          "command": "kalpy.ptt.clear-board-search",
+          "when": "view == kalpyPttTree && viewItem =~ /Searching$/",
+          "group": "1_modification@2"
         }
       ],
       "commandPalette": [
@@ -291,7 +331,7 @@
           "when": "false"
         },
         {
-          "command": "kalpy.ptt.search-board-by-push",
+          "command": "kalpy.ptt.clear-board-search",
           "when": "false"
         }
       ],

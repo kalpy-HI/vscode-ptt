@@ -9,7 +9,7 @@ import { PttTreeViewController, getBoardNameFromItem } from './views/PttTreeView
 import ContentProvider from './provider';
 import PttHoverProvider from './hoverProvider';
 import { LiveTracker } from './liveTracker';
-import store, { type ArticleListItem } from './store';
+import store from './store';
 import type { IPttClient, FavoriteBoardItem } from './types';
 import logger from './logger';
 import { WebPttClient, isWebClient } from './webClient';
@@ -21,6 +21,15 @@ import {
   parseLocalBoardsImport
 } from './localBoards';
 import { updateFromSource } from './selfUpdate';
+import {
+  SEARCH_TYPES,
+  type SearchType,
+  addCondition,
+  describeSearch,
+  toSearchCondition,
+  validateSearchInput
+} from './search';
+import type { SearchCondition } from './types';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
@@ -492,9 +501,124 @@ async function pickFavorite (): Promise<string | null> {
   return null;
 }
 
-function setSearchCondition(type: string, criteria: string): void
-{
-  ptt.setSearchCondition(type, criteria);
+/**
+ * Replaces a board's article list with search results. The conditions are stored per board
+ * and passed explicitly on every fetch, so other boards are never filtered.
+ */
+export async function runBoardSearch (boardname: string, conditions: SearchCondition[]): Promise<number> {
+  contentProvider?.clearCache(boardname);
+  store.release(boardname);
+  store.setSearch(boardname, conditions);
+  const articles = await ptt.getArticles(boardname, 0, conditions);
+  store.add(boardname, articles ?? []);
+  store.markSearchLoaded(boardname);
+  refreshTreeView();
+  return articles?.length ?? 0;
+}
+
+async function pickBoardForSearch (): Promise<string | undefined> {
+  const local = new LocalBoards(ctx?.globalState).list();
+  const remote = store.getFavorites().map(f => f.boardname).filter(Boolean);
+  const seen = new Set<string>();
+  const items: vscode.QuickPickItem[] = [];
+  for (const [names, group] of [[local, '本地喜愛看板'], [remote, isWebClient(ptt) ? '熱門看板' : '我的最愛']] as const) {
+    for (const name of names) {
+      if (!seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase());
+        items.push({ label: name, description: group });
+      }
+    }
+  }
+  const quickPick = vscode.window.createQuickPick();
+  quickPick.title = '要搜尋哪個看板？';
+  quickPick.placeholder = '選一個看板，或直接輸入看板名稱後按 Enter';
+  quickPick.items = items;
+  return new Promise(resolve => {
+    quickPick.onDidAccept(() => {
+      const picked = quickPick.selectedItems[0]?.label ?? quickPick.value.trim();
+      quickPick.hide();
+      resolve(picked && BOARD_NAME_PATTERN.test(picked) ? picked : undefined);
+    });
+    quickPick.onDidHide(() => {
+      quickPick.dispose();
+      resolve(undefined);
+    });
+    quickPick.show();
+  });
+}
+
+/** 搜尋文章：選條件 → 輸入 → 顯示結果。已在搜尋中的看板會在結果中再加條件。 */
+export async function searchBoardCommand (boardArg?: unknown, presetType?: SearchType): Promise<number | undefined> {
+  if (!checkLogin()) {
+    await login();
+    if (!checkLogin()) {
+      return undefined;
+    }
+  }
+  const boardname = (typeof boardArg === 'string' ? boardArg : getBoardNameFromItem(boardArg)) ?? await pickBoardForSearch();
+  if (!boardname) {
+    return undefined;
+  }
+
+  const existing = store.getSearch(boardname);
+  let type = presetType;
+  if (!type) {
+    const items: (vscode.QuickPickItem & { type?: SearchType; clear?: boolean })[] = SEARCH_TYPES.map(t => ({
+      label: t.label,
+      detail: t.detail,
+      type: t.type
+    }));
+    if (existing.length > 0) {
+      items.push({ label: '$(clear-all) 清除搜尋', detail: `回到 ${boardname} 的完整文章列表`, clear: true });
+    }
+    const picked = await vscode.window.showQuickPick(items, {
+      title: `搜尋 ${boardname}`,
+      placeHolder: existing.length > 0
+        ? `目前條件：${describeSearch(existing)}。新條件會在結果中再篩選（同類條件會取代）`
+        : '要用什麼條件搜尋？',
+      matchOnDetail: true
+    });
+    if (!picked) {
+      return undefined;
+    }
+    if (picked.clear) {
+      await clearBoardSearch(boardname);
+      return undefined;
+    }
+    type = picked.type;
+  }
+  const spec = SEARCH_TYPES.find(t => t.type === type);
+  if (!spec) {
+    return undefined;
+  }
+
+  const raw = await vscode.window.showInputBox({
+    title: `搜尋 ${boardname}：${spec.label.replace(/^\$\([^)]+\)\s*/, '')}`,
+    prompt: spec.prompt,
+    placeHolder: spec.placeHolder,
+    value: existing.find(c => c.type === spec.type)?.criteria ?? '',
+    validateInput: value => validateSearchInput(spec.type, value)
+  });
+  if (raw === undefined || validateSearchInput(spec.type, raw)) {
+    return undefined;
+  }
+
+  const conditions = addCondition(existing, toSearchCondition(spec.type, raw));
+  const count = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: `正在搜尋 ${boardname}：${describeSearch(conditions)}...` },
+    () => runBoardSearch(boardname, conditions)
+  );
+  if (count === 0) {
+    vscode.window.showInformationMessage(`${boardname} 找不到符合「${describeSearch(conditions)}」的文章`);
+  }
+  return count;
+}
+
+export async function clearBoardSearch (boardname: string): Promise<void> {
+  if (!store.isSearching(boardname)) {
+    return;
+  }
+  await runBoardSearch(boardname, []);
 }
 
 export async function activate(context: vscode.ExtensionContext) {
@@ -741,6 +865,10 @@ export async function activate(context: vscode.ExtensionContext) {
       store.clearFavorites();
       ctx.globalState.update('cachedFavorites', []);
       ptt.resetSearchCondition();
+      for (const board of store.clearAllSearches()) {
+        contentProvider?.clearCache(board);
+        store.release(board);
+      }
       refreshTreeView();
     });
   }));
@@ -755,9 +883,13 @@ export async function activate(context: vscode.ExtensionContext) {
         logger.log(`[RefreshBoard] Refreshing board: ${specificBoard}`);
         contentProvider?.clearCache(specificBoard);
         store.release(specificBoard);
-        const articles = await ptt.getArticles(specificBoard);
+        // A board that is being searched stays in search mode when refreshed
+        const articles = await ptt.getArticles(specificBoard, 0, store.getSearch(specificBoard));
         logger.log(`[RefreshBoard] Loaded ${articles?.length || 0} articles for ${specificBoard}`);
         store.add(specificBoard, articles);
+        if (store.isSearching(specificBoard)) {
+          store.markSearchLoaded(specificBoard);
+        }
         refreshTreeView();
       });
     }
@@ -784,7 +916,7 @@ export async function activate(context: vscode.ExtensionContext) {
     await vscode.window.withProgress({ location: { viewId: 'kalpyPttTree' } }, async () => {
       const targetSn = lastSn > 0 ? Math.max(lastSn - 1, 1) : 0;
       logger.log(`[LoadMore] Fetching older articles for ${boardname} (target cursor SN: ${targetSn})...`);
-      const articles = await ptt.getArticles(boardname, targetSn);
+      const articles = await ptt.getArticles(boardname, targetSn, store.getSearch(boardname));
       logger.log(`[LoadMore] Received ${articles?.length || 0} older articles for ${boardname}`);
 
       if (articles?.length > 0) {
@@ -805,36 +937,23 @@ export async function activate(context: vscode.ExtensionContext) {
     refreshTreeView();
   }));
 
-  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.search-board-by-push', async (board: Board | unknown) => {
-    const boardname = getBoardNameFromItem(board);
-    if (!boardname) {
-      return;
+  context.subscriptions.push(vscode.commands.registerCommand(
+    'kalpy.ptt.search-board',
+    (board?: unknown) => searchBoardCommand(board)
+  ));
+  context.subscriptions.push(vscode.commands.registerCommand(
+    'kalpy.ptt.search-board-by-keyword',
+    (board?: unknown) => searchBoardCommand(board, 'title')
+  ));
+  context.subscriptions.push(vscode.commands.registerCommand(
+    'kalpy.ptt.search-board-by-push',
+    (board?: unknown) => searchBoardCommand(board, 'push')
+  ));
+  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.clear-board-search', async (board?: unknown) => {
+    const boardname = typeof board === 'string' ? board : getBoardNameFromItem(board);
+    if (boardname) {
+      await vscode.window.withProgress({ location: { viewId: 'kalpyPttTree' } }, () => clearBoardSearch(boardname));
     }
-    let push = await vscode.window.showInputBox({
-      prompt: '輸入推文數',
-      placeHolder: '0 ~ 100'
-    });
-
-    if (Number(push) > 100) {
-      push = '100';
-    }
-
-    if (!store.isEmpty(boardname)) {
-      store.release(boardname);
-    }
-
-    await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: `正在以推文數 ${push} 搜尋看板 ${boardname}...`
-      },
-      async () => {
-        setSearchCondition("push", push);
-        const pushArticles: ArticleListItem[] = await ptt.getArticles(boardname);
-        store.add(boardname, pushArticles);
-        refreshTreeView();
-      }
-    );
   }));
 
   context.subscriptions.push(

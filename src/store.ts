@@ -1,4 +1,4 @@
-import type { FavoriteBoardItem } from './types';
+import type { FavoriteBoardItem, SearchCondition } from './types';
 
 export interface ArticleListItem {
   sn: number;
@@ -39,7 +39,48 @@ class ArticleStore {
     this.articleIds = {};
     this.favorites = [];
     this.favoritesLoaded = false;
+    this.searches = {};
+    this.searchLoaded.clear();
   }
+
+  // Per-board search (關鍵字 / 作者 / 推文數). Articles stored for a board while it has a search
+  // are the search results.
+  private searches: { [boardname: string]: SearchCondition[] } = {};
+
+  getSearch(boardname: string): SearchCondition[] {
+    return this.searches[boardname] ?? [];
+  }
+
+  isSearching(boardname: string): boolean {
+    return this.getSearch(boardname).length > 0;
+  }
+
+  setSearch(boardname: string, conditions: SearchCondition[]): void {
+    this.searchLoaded.delete(boardname);
+    if (conditions.length === 0) {
+      delete this.searches[boardname];
+    } else {
+      this.searches[boardname] = [...conditions];
+    }
+  }
+
+  /** Marks that the first page of search results arrived (possibly empty). */
+  markSearchLoaded(boardname: string): void {
+    this.searchLoaded.add(boardname);
+  }
+
+  isSearchLoaded(boardname: string): boolean {
+    return this.searchLoaded.has(boardname);
+  }
+
+  clearAllSearches(): string[] {
+    const boards = Object.keys(this.searches);
+    this.searches = {};
+    this.searchLoaded.clear();
+    return boards;
+  }
+
+  private searchLoaded = new Set<string>();
 
   asList(boardname: string): ArticleListItem[] {
     return (this.articleIds[boardname] || [])

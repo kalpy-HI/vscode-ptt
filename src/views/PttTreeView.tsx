@@ -6,6 +6,7 @@ import type { IPttClient, FavoriteBoardItem } from '../types';
 import logger from '../logger';
 import { isWebClient } from '../webClient';
 import { LocalBoards } from '../localBoards';
+import { describeSearch } from '../search';
 
 export interface PttTreeViewProps {
   ptt: IPttClient;
@@ -184,8 +185,15 @@ export const BoardNode: FC<{
 }> = ({ boardName, boardTitle, contextValue = 'board', idPrefix = '' }) => {
   const articles = store.asList(boardName);
   const articleCount = articles.length;
-  const description = articleCount > 0 ? `${articleCount} 篇` : boardTitle;
-  const tooltip = boardTitle ? `${boardName} (${boardTitle})` : boardName;
+  const search = store.getSearch(boardName);
+  const searching = search.length > 0;
+  const searchText = describeSearch(search);
+  const noResults = searching && articleCount === 0 && store.isSearchLoaded(boardName);
+  const description = searching
+    ? `🔍 ${searchText}${articleCount > 0 ? ` · ${articleCount} 篇` : ''}`
+    : articleCount > 0 ? `${articleCount} 篇` : boardTitle;
+  const baseTooltip = boardTitle ? `${boardName} (${boardTitle})` : boardName;
+  const tooltip = searching ? `${baseTooltip}\n搜尋中：${searchText}` : baseTooltip;
   const oldestSn = store.lastSn(boardName);
   const hasReachedBeginning = oldestSn <= 1 && articleCount > 0;
 
@@ -196,9 +204,32 @@ export const BoardNode: FC<{
       description={description}
       tooltip={tooltip}
       iconPath={new vscode.ThemeIcon(contextValue === 'board' ? 'heart' : 'bookmark')}
-      contextValue={contextValue}
+      contextValue={searching ? `${contextValue}Searching` : contextValue}
     >
-      {articleCount === 0 && (
+      {searching && (
+        <TreeItem
+          id={`${idPrefix}search-${boardName}`}
+          label={`搜尋：${searchText}`}
+          description="點此清除搜尋"
+          tooltip="目前只顯示符合條件的文章，點一下回到完整文章列表"
+          iconPath={new vscode.ThemeIcon('filter')}
+          command={{
+            command: 'kalpy.ptt.clear-board-search',
+            title: '清除搜尋',
+            arguments: [boardName]
+          }}
+        />
+      )}
+
+      {noResults && (
+        <TreeItem
+          id={`${idPrefix}noresult-${boardName}`}
+          label="找不到符合的文章"
+          iconPath={new vscode.ThemeIcon('info')}
+        />
+      )}
+
+      {articleCount === 0 && !noResults && (
         <TreeItem
           id={`${idPrefix}loading-${boardName}`}
           label="載入文章中..."
@@ -516,13 +547,13 @@ export class PttTreeViewController {
           logger.log(`[AutoLoad] Board disclosure expanded: ${boardName}`);
           if (typeof vscode.window?.withProgress === 'function') {
             await vscode.window.withProgress({ location: { viewId: 'kalpyPttTree' } }, async () => {
-              const articles = await this.ptt.getArticles(boardName);
+              const articles = await this.ptt.getArticles(boardName, 0, store.getSearch(boardName));
               logger.log(`[AutoLoad] Loaded ${articles?.length || 0} articles for ${boardName}`);
               store.add(boardName, articles);
               this.refresh();
             });
           } else {
-            const articles = await this.ptt.getArticles(boardName);
+            const articles = await this.ptt.getArticles(boardName, 0, store.getSearch(boardName));
             store.add(boardName, articles);
             this.refresh();
           }
