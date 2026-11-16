@@ -76,6 +76,17 @@
         "icon": "$(eye)"
       },
       {
+        "command": "kalpy.ptt.update-from-source",
+        "title": "從原始碼更新擴充功能",
+        "category": "PTT",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "kalpy.ptt.update-from-source-choose-folder",
+        "title": "從原始碼更新擴充功能（重新選擇資料夾）",
+        "category": "PTT"
+      },
+      {
         "command": "kalpy.ptt.add-to-local-boards",
         "title": "加入本地喜愛看板",
         "category": "PTT",
@@ -202,6 +213,11 @@
           "command": "kalpy.ptt.favorite-board",
           "when": "view == kalpyPttTree && kalpyPtt:loggedIn",
           "group": "2_localBoards@3"
+        },
+        {
+          "command": "kalpy.ptt.update-from-source",
+          "when": "view == kalpyPttTree",
+          "group": "9_update@1"
         }
       ],
       "view/item/context": [
