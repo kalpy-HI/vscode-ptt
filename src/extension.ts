@@ -20,6 +20,7 @@ import {
   normalizeBoardNames,
   parseLocalBoardsImport
 } from './localBoards';
+import { updateFromSource } from './selfUpdate';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
@@ -697,6 +698,12 @@ export async function activate(context: vscode.ExtensionContext) {
       vscode.window.showErrorMessage(`匯入失敗：${err instanceof Error ? err.message : String(err)}`);
     }
   }));
+
+  context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.update-from-source', () => updateFromSource(context)));
+  context.subscriptions.push(vscode.commands.registerCommand(
+    'kalpy.ptt.update-from-source-choose-folder',
+    () => updateFromSource(context, { chooseFolder: true })
+  ));
 
   context.subscriptions.push(vscode.commands.registerCommand('kalpy.ptt.show-article', async (sn, boardname) => {
     logger.log(`[ShowArticle] Opening /${boardname}/${sn}.ptt`);
