@@ -1,5 +1,20 @@
 # Change Log
 
+## Unreleased (kalpy fork)
+
+### Changed
+
+- 擴充功能 ID 改為 `kalpy.vscode-ptt`，可與原版並存
+
+### Added
+
+- 訪客模式改用 PTT 網頁版 (www.ptt.cc) 讀取看板與文章，「我的最愛」顯示熱門看板
+
+### Fixed
+
+- 登入畫面與登入錯誤訊息為 Big5 編碼時顯示亂碼，導致帳密錯誤要等 15 秒逾時才回報
+- 登入失敗時不再對帳號欄連續送出 `q`
+
 ## 0.4.1
 
 ### Added

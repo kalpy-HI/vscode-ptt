@@ -7,8 +7,11 @@ import {
   setPttClient,
   setPttClientFactory,
   setExtensionContext,
-  setPttProvider
+  setPttProvider,
+  setWebClientFactory,
+  isGuestMode
 } from '../../extension';
+import { WebPttClient } from '../../webClient';
 import { MockPttClient } from './mockPttClient';
 import { PttTreeDataProvider } from '../../pttDataProvider';
 import { mockVscode } from './setup';
@@ -49,6 +52,7 @@ describe('Login Unit Tests', () => {
     setPttClientFactory(() => Promise.resolve(mockPtt));
     setExtensionContext(mockContext);
     setPttProvider(mockProvider);
+    setWebClientFactory(() => new WebPttClient(async () => ({ status: 200, ok: true, text: async () => '' })));
   });
 
   describe('getLoginCredential', () => {
@@ -158,7 +162,52 @@ describe('Login Unit Tests', () => {
       assert.strictEqual(checkLogin(), true);
       assert.strictEqual(globalStore['username'], 'guest');
       assert.strictEqual(globalStore['password'], '');
-      assert.ok(messages.info.some(msg => msg.includes('guest 登入成功')));
+      assert.strictEqual(isGuestMode(), true, 'guest should use the web client');
+      assert.ok(messages.info.some(msg => msg.includes('以訪客身分登入')));
+    });
+
+    it('does not send guest to the BBS (WebSocket) client', async () => {
+      let bbsLoginCalled = false;
+      const originalLogin = mockPtt.login.bind(mockPtt);
+      mockPtt.login = async (...args: any[]) => {
+        bbsLoginCalled = true;
+        return originalLogin(...args);
+      };
+      globalStore['username'] = 'guest';
+      globalStore['password'] = '';
+
+      await login(true);
+
+      assert.strictEqual(bbsLoginCalled, false);
+      assert.strictEqual(checkLogin(), true);
+    });
+
+    it('warns when www.ptt.cc is unreachable in guest mode', async () => {
+      setWebClientFactory(() => new WebPttClient(async () => { throw new Error('offline'); }));
+      globalStore['username'] = 'guest';
+      globalStore['password'] = '';
+
+      const ok = await login(false);
+
+      assert.strictEqual(ok, false);
+      assert.ok(messages.warning.some(msg => msg.includes('www.ptt.cc')));
+    });
+
+    it('switches back to the BBS client when a real account logs in after guest', async () => {
+      globalStore['username'] = 'guest';
+      globalStore['password'] = '';
+      await login(true);
+      assert.strictEqual(isGuestMode(), true);
+
+      // simulate logout of the guest session
+      globalStore['username'] = 'realuser';
+      globalStore['password'] = 'pw';
+      setPttClient(new WebPttClient(async () => ({ status: 200, ok: true, text: async () => '' })));
+
+      const ok = await login(true);
+
+      assert.strictEqual(ok, true);
+      assert.strictEqual(isGuestMode(), false);
     });
 
     it('successfully logs in with normal account', async () => {

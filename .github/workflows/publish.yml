@@ -53,8 +53,8 @@ jobs:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: |
           if [ -z "$VSCE_PAT" ]; then
-            echo "::error::Secret VSCE_PAT is not set. Skipping Visual Studio Marketplace publish."
-            exit 1
+            echo "::warning::Secret VSCE_PAT is not set. Skipping Visual Studio Marketplace publish."
+            exit 0
           fi
           pnpm exec vsce publish --packagePath vscode-ptt.vsix -p "$VSCE_PAT"
 
@@ -64,8 +64,8 @@ jobs:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
         run: |
           if [ -z "$OVSX_PAT" ]; then
-            echo "::error::Secret OVSX_PAT is not set. Skipping Open VSX publish."
-            exit 1
+            echo "::warning::Secret OVSX_PAT is not set. Skipping Open VSX publish."
+            exit 0
           fi
           pnpm exec ovsx publish vscode-ptt.vsix -p "$OVSX_PAT"
 

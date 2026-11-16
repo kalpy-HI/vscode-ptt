@@ -194,7 +194,7 @@ export class Bot extends EventEmitter {
       let ret: boolean | null = null;
       let attempts = 0;
       ret = await this._checkLogin(kick);
-      while (ret === null && attempts < 30) {
+      while (ret === null && attempts < 30 && this.state.connect) {
         attempts++;
         await sleep(300);
         ret = await this._checkLogin(kick);
@@ -226,7 +226,16 @@ export class Bot extends EventEmitter {
     const { getLine } = this;
     const screenBottom = [getLine(19).str, getLine(20).str, getLine(21).str, getLine(22).str, getLine(23).str].join(' ');
 
-    if (screenBottom.includes('密碼不對') || screenBottom.includes('無此帳號') || screenBottom.includes('請稍後再試')) {
+    if (!this.state.connect) {
+      this.emit('login.failed');
+      return false;
+    }
+    if (
+      screenBottom.includes('密碼不對') ||
+      screenBottom.includes('無此帳號') ||
+      screenBottom.includes('請稍後再試') ||
+      screenBottom.includes('請改用網頁版')
+    ) {
       this.emit('login.failed');
       return false;
     }
@@ -258,6 +267,11 @@ export class Bot extends EventEmitter {
     ) {
       this.emit('login.success');
       return true;
+    }
+
+    // Still on the username/password prompt: pressing 'q' here would type into the field
+    if (screenBottom.includes('請輸入代號') || screenBottom.includes('請輸入您的密碼')) {
+      return null;
     }
 
     await this.send('q');
