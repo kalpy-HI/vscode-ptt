@@ -164,7 +164,7 @@ export const ArticleNode: FC<{
       iconPath={getIcon()}
       contextValue="article"
       command={{
-        command: 'ptt.show-article',
+        command: 'kalpy.ptt.show-article',
         title: '開啟文章',
         arguments: [article.sn, boardName]
       }}
@@ -204,7 +204,7 @@ export const BoardNode: FC<{
           label="載入文章中..."
           iconPath={new vscode.ThemeIcon('loading~spin')}
           command={{
-            command: 'ptt.refresh-board',
+            command: 'kalpy.ptt.refresh-board',
             title: '載入文章',
             arguments: [boardName]
           }}
@@ -227,7 +227,7 @@ export const BoardNode: FC<{
           iconPath={new vscode.ThemeIcon('arrow-down')}
           contextValue="loadMore"
           command={{
-            command: 'ptt.load-more-article',
+            command: 'kalpy.ptt.load-more-article',
             title: '載入更多文章',
             arguments: [boardName]
           }}
@@ -358,7 +358,7 @@ export const FavoriteNode: FC<{
           description="點擊重試"
           iconPath={new vscode.ThemeIcon('error')}
           command={{
-            command: 'ptt.refresh-article',
+            command: 'kalpy.ptt.refresh-article',
             title: '重新整理'
           }}
         />
@@ -417,7 +417,7 @@ export const LocalBoardsNode: FC<{
           label="尚未加入本地喜愛看板"
           description="點擊新增"
           iconPath={new vscode.ThemeIcon('add')}
-          command={{ command: 'ptt.add-board', title: '新增本地喜愛看板' }}
+          command={{ command: 'kalpy.ptt.add-board', title: '新增本地喜愛看板' }}
         />
       )}
       {boards.map(boardName => (
@@ -444,7 +444,7 @@ export const PttTreeView: FC<PttTreeViewProps> = ({ ptt, context, isLoggedIn, ve
           label="以帳號登入"
           description="登入 PTT 帳號"
           iconPath={new vscode.ThemeIcon('sign-in')}
-          command="ptt.login"
+          command="kalpy.ptt.login"
         />
         <TreeItem
           id="not-logged-in-guest"
@@ -452,7 +452,7 @@ export const PttTreeView: FC<PttTreeViewProps> = ({ ptt, context, isLoggedIn, ve
           description="唯讀，免帳號"
           tooltip="不需要帳號，透過 PTT 網頁版瀏覽（只能看，不能推文或發文）"
           iconPath={new vscode.ThemeIcon('eye')}
-          command="ptt.login-guest"
+          command="kalpy.ptt.login-guest"
         />
       </>
     );
@@ -501,7 +501,7 @@ export class PttTreeViewController {
         isLoggedIn={isLoggedIn}
         version={this.version}
       />,
-      'pttTree'
+      'kalpyPttTree'
     );
 
     const tv = this.treeView as vscode.TreeView<unknown> | undefined;
@@ -515,7 +515,7 @@ export class PttTreeViewController {
         if (boardName && store.isEmpty(boardName)) {
           logger.log(`[AutoLoad] Board disclosure expanded: ${boardName}`);
           if (typeof vscode.window?.withProgress === 'function') {
-            await vscode.window.withProgress({ location: { viewId: 'pttTree' } }, async () => {
+            await vscode.window.withProgress({ location: { viewId: 'kalpyPttTree' } }, async () => {
               const articles = await this.ptt.getArticles(boardName);
               logger.log(`[AutoLoad] Loaded ${articles?.length || 0} articles for ${boardName}`);
               store.add(boardName, articles);

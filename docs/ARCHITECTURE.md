@@ -7,7 +7,7 @@ flowchart LR
   subgraph VSCode["VS Code 擴充套件 (src/)"]
     EXT["extension.ts<br/>啟動、指令註冊、登入流程"]
     TREE["views/PttTreeView.tsx<br/>側邊欄「文章列表」(React TreeView)"]
-    FS["provider.ts<br/>ptt:// 唯讀檔案系統"]
+    FS["provider.ts<br/>kalpy-ptt:// 唯讀檔案系統"]
     HOVER["hoverProvider.ts + linkPreview.ts<br/>圖片 / 外部連結懸浮預覽"]
     LIVE["liveTracker.ts<br/>即時追推文 (定時刷新)"]
     STORE["store.ts<br/>文章列表 / 我的最愛快取"]
@@ -45,7 +45,7 @@ flowchart TD
   A([VS Code 啟動 / 觸發 ptt 指令]) --> B[activate]
   B --> C[從 globalState 載入快取的我的最愛]
   C --> D[建立 PTT client 並連線 term.ptt.cc<br/>逾時 5 秒]
-  D --> E[建立 TreeView、ptt:// FileSystemProvider、<br/>HoverProvider、LiveTracker，註冊指令]
+  D --> E[建立 TreeView、kalpy-ptt:// FileSystemProvider、<br/>HoverProvider、LiveTracker，註冊指令]
   E --> F["靜默登入 login(silent=true)"]
   F --> LM{上次是訪客模式?<br/>loginMode == guest}
   LM -- 是 --> GW
@@ -56,7 +56,7 @@ flowchart TD
   G -- 是 --> I["ptt.login(帳號, 密碼, kickLogin)<br/>逾時 15 秒"]
   GW["改用 WebPttClient<br/>連 www.ptt.cc (帶 over18 cookie)"] -- 成功 --> J
   GW -- 失敗 --> X
-  I -- 成功 --> J[設定 ptt:loggedIn = true<br/>刷新 TreeView]
+  I -- 成功 --> J[設定 kalpyPtt:loggedIn = true<br/>刷新 TreeView]
   I -- 失敗 --> X
 
   X --> GB([點「以訪客身分瀏覽」<br/>PTT: 以訪客身分瀏覽]) --> GW
@@ -92,7 +92,7 @@ flowchart TD
   F --> H[「載入更多文章」<br/>ptt.load-more-article 以 lastSn 往前翻]
   H --> F
 
-  G -- 點擊 --> I["ptt.show-article<br/>開啟 ptt:/看板/編號.ptt"]
+  G -- 點擊 --> I["kalpy.ptt.show-article<br/>開啟 kalpy-ptt:/看板/編號.ptt"]
   I --> J{FileSystemProvider<br/>快取命中?}
   J -- 是 --> K[直接顯示]
   J -- 否 --> J1[必要時自動登入 → ptt.getArticle<br/>逐頁 PgDown 讀完全文] --> J2[寫入快取] --> K
@@ -107,7 +107,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  A([文章分頁右上角 📡 / 右鍵 / 狀態列]) --> B{目前是 ptt:// 文章?}
+  A([文章分頁右上角 📡 / 右鍵 / 狀態列]) --> B{目前是 kalpy-ptt:// 文章?}
   B -- 否 --> W[提示：請先開啟 PTT 文章]
   B -- 是 --> C{已登入?}
   C -- 否 --> W2[提示：請先登入]
@@ -124,7 +124,7 @@ flowchart TD
 
 ### 安裝（從自己的 Fork 打包 .vsix）
 
-需要 Node.js 20+、pnpm 與 VS Code 的 `code` 指令。
+需要 Node.js 20+ 與 pnpm。
 
 ```bash
 git clone https://github.com/<你的帳號>/vscode-ptt.git
@@ -139,39 +139,45 @@ pnpm install
 ```
 
 ```bash
-pnpm package
+pnpm run package:local
 ```
 
-會在專案根目錄產生 `vscode-ptt-<版本>.vsix`，接著安裝：
+會在專案根目錄產生 `vscode-ptt.vsix`。接著在 **VS Code 裡**安裝：
 
-```bash
-code --install-extension vscode-ptt-0.4.1.vsix --force
-```
+1. 打開擴充功能面板（`Ctrl+Shift+X`）
+2. 右上角 `⋯` → **從 VSIX 安裝…**（Install from VSIX…），選 `vscode-ptt.vsix`
+3. 按通知上的「重新載入」，左側活動列會出現「VSCode PTT (kalpy)」
 
-這個 Fork 的擴充功能 ID 是 `kalpy.vscode-ptt`（原版為 `Yukai.vscode-ptt`），兩者可以同時存在，市集的自動更新也不會覆蓋它。建議先在擴充功能面板停用或解除安裝原版，免得兩個側邊欄同時出現。
+之後改了程式碼，重跑 `pnpm run package:local` 再用同樣方式安裝即可。
 
-也可以在 VS Code 擴充功能面板右上角 `⋯` → **從 VSIX 安裝…** 選這個檔案。安裝後重新載入視窗，左側活動列會出現 PTT 圖示。
+> **不建議在 VS Code 開著時用 `code --install-extension`（或 `pnpm run install:local`）安裝。** 開著的視窗可能把自己記憶中的擴充功能清單（`~/.vscode/extensions/extensions.json`）寫回去，蓋掉剛裝的那一筆，結果資料夾在、`code --list-extensions` 也列得出來，但 VS Code 裡完全看不到。要用指令列安裝，請先關閉所有 VS Code 視窗。
+
+這個 Fork 的擴充功能 ID 是 `kalpy.vscode-ptt`（原版為 `Yukai.vscode-ptt`），市集的自動更新不會覆蓋它。Fork 自己註冊的東西都加了 `kalpy` 前綴，可以和原版同時安裝：
+
+| 項目 | 原版 | 這個 Fork |
+| --- | --- | --- |
+| 指令 | `ptt.login` … | `kalpy.ptt.login` … |
+| 側邊欄 | `ptt-explorer` / `pttTree` | `kalpy-ptt-explorer` / `kalpyPttTree`，標題「VSCode PTT (kalpy)」 |
+| 文章網址 | `ptt:/看板/編號.ptt` | `kalpy-ptt:/看板/編號.ptt` |
+| 狀態鍵 | `ptt:loggedIn` … | `kalpyPtt:loggedIn` … |
+
+兩者共用的只有 `ptt` 語言（語法高亮）和設定值（`kickLogin`、`previewImages` 等），改設定會同時影響兩邊。
+
+#### 裝了卻看不到圖示
+
+1. 擴充功能面板搜尋 `@installed kalpy`。找不到的話，多半是上面說的清單被覆蓋：關閉所有 VS Code 視窗，執行 `code --uninstall-extension kalpy.vscode-ptt`，刪掉 `~/.vscode/extensions/kalpy.vscode-ptt-*` 資料夾，以及 `~/.vscode/extensions/.obsolete`（若裡面有 kalpy），再用「從 VSIX 安裝…」重裝
+2. 在左側活動列按右鍵，確認「VSCode PTT (kalpy)」沒有被隱藏
+3. 用 VS Code 打開專案按 `F5` →「Run Extension」，在不安裝的情況下直接跑原始碼，可以確認是程式還是安裝的問題
 
 注意事項：
 
 - `package.json` 指定的是 `pnpm@12`。如果你的 pnpm 版本切換失敗，可以用 `mise install` 裝指定版本，或在 `~/.npmrc` 加上 `manage-package-manager-versions=false`，改用本機的 pnpm 10。
-- 改完程式碼後重新執行 `pnpm package`，再用同一行 `code --install-extension ... --force` 覆蓋安裝即可。
 
 ### 部署
 
 #### A. 安裝到自己的 VS Code（最常用）
 
-在專案根目錄執行。這行會打包成 `vscode-ptt.vsix` 並直接覆蓋安裝；改完程式碼後重跑同一行即可：
-
-```bash
-pnpm install
-```
-
-```bash
-pnpm run install:local
-```
-
-完成後在 VS Code 執行「Developer: Reload Window」。
+同上一節：`pnpm run package:local` 打包，再在 VS Code 裡「從 VSIX 安裝…」。
 
 #### B. 發佈 GitHub Release（給其他電腦或朋友安裝）
 

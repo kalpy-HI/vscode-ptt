@@ -1,10 +1,11 @@
 # Change Log
 
-## Unreleased (kalpy fork)
+## 0.5.0 (kalpy fork)
 
 ### Changed
 
-- 擴充功能 ID 改為 `kalpy.vscode-ptt`，可與原版並存
+- 擴充功能 ID 改為 `kalpy.vscode-ptt`，市集自動更新不會覆蓋
+- 指令、側邊欄、狀態鍵與文章網址都加上 `kalpy` 前綴（`kalpy.ptt.*`、`kalpyPttTree`、`kalpy-ptt:`），可與原版同時安裝；側邊欄標題改為「VSCode PTT (kalpy)」
 
 ### Added
 

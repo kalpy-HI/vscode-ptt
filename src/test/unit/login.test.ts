@@ -398,7 +398,7 @@ describe('Login Unit Tests', () => {
       assert.ok(messages.warning.some(msg => msg.includes('無法連線至 PTT 伺服器')));
     });
 
-    it('updates ptt:loggedIn context key on login state change', async () => {
+    it('updates kalpyPtt:loggedIn context key on login state change', async () => {
       const contextKeys: Record<string, unknown> = {};
       mockVscode.commands.executeCommand = async (cmd: string, key: string, val: any) => {
         if (cmd === 'setContext') {
@@ -418,8 +418,8 @@ describe('Login Unit Tests', () => {
 
       await login(false);
 
-      assert.strictEqual(contextKeys['ptt:loggedIn'], true);
-      assert.strictEqual(contextKeys['ptt:guestMode'], false);
+      assert.strictEqual(contextKeys['kalpyPtt:loggedIn'], true);
+      assert.strictEqual(contextKeys['kalpyPtt:guestMode'], false);
     });
 
     it('deduplicates concurrent login calls and awaits single in-flight attempt', async () => {

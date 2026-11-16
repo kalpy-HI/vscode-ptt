@@ -134,6 +134,9 @@ export const mockVscode = {
     },
     registerHoverProvider: (_selector: unknown, _provider: unknown) => ({ dispose: () => {} })
   },
+  extensions: {
+    getExtension: (_id: string): unknown => undefined
+  },
   commands: {
     registerCommand: () => ({ dispose: () => {} }),
     executeCommand: async (..._args: unknown[]): Promise<unknown> => undefined

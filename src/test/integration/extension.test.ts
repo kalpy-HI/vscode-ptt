@@ -12,13 +12,13 @@ suite('Extension Integration Tests', () => {
 
     const commands = await vscode.commands.getCommands(true);
 
-    assert.ok(commands.includes('ptt.login'), 'ptt.login should be registered');
-    assert.ok(commands.includes('ptt.logout'), 'ptt.logout should be registered');
-    assert.ok(commands.includes('ptt.add-board'), 'ptt.add-board should be registered');
-    assert.ok(commands.includes('ptt.remove-board'), 'ptt.remove-board should be registered');
-    assert.ok(commands.includes('ptt.favorite-board'), 'ptt.favorite-board should be registered');
-    assert.ok(commands.includes('ptt.refresh-article'), 'ptt.refresh-article should be registered');
-    assert.ok(commands.includes('ptt.refresh-board'), 'ptt.refresh-board should be registered');
+    assert.ok(commands.includes('kalpy.ptt.login'), 'kalpy.ptt.login should be registered');
+    assert.ok(commands.includes('kalpy.ptt.logout'), 'kalpy.ptt.logout should be registered');
+    assert.ok(commands.includes('kalpy.ptt.add-board'), 'kalpy.ptt.add-board should be registered');
+    assert.ok(commands.includes('kalpy.ptt.remove-board'), 'kalpy.ptt.remove-board should be registered');
+    assert.ok(commands.includes('kalpy.ptt.favorite-board'), 'kalpy.ptt.favorite-board should be registered');
+    assert.ok(commands.includes('kalpy.ptt.refresh-article'), 'kalpy.ptt.refresh-article should be registered');
+    assert.ok(commands.includes('kalpy.ptt.refresh-board'), 'kalpy.ptt.refresh-board should be registered');
   });
 
   test('Can execute ptt.refresh-article command without error', async () => {
@@ -28,6 +28,6 @@ suite('Extension Integration Tests', () => {
     }
 
     // Should execute cleanly
-    await vscode.commands.executeCommand('ptt.refresh-article');
+    await vscode.commands.executeCommand('kalpy.ptt.refresh-article');
   });
 });

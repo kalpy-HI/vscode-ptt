@@ -24,29 +24,29 @@ describe('LiveTracker Unit Tests', () => {
   });
 
   it('parses valid ptt URIs and rejects invalid schemes/paths', () => {
-    const valid1 = tracker.parseUri(vscode.Uri.parse('ptt:/Gossiping/12345.ptt'));
+    const valid1 = tracker.parseUri(vscode.Uri.parse('kalpy-ptt:/Gossiping/12345.ptt'));
     assert.deepStrictEqual(valid1?.boardname, 'Gossiping');
     assert.deepStrictEqual(valid1?.sn, '12345');
 
-    const valid2 = tracker.parseUri(vscode.Uri.parse('ptt:/NBA/67890'));
+    const valid2 = tracker.parseUri(vscode.Uri.parse('kalpy-ptt:/NBA/67890'));
     assert.deepStrictEqual(valid2?.boardname, 'NBA');
     assert.deepStrictEqual(valid2?.sn, '67890');
 
-    assert.strictEqual(tracker.getKeyFromUri(vscode.Uri.parse('ptt:/Gossiping/12345.ptt')), 'Gossiping/12345');
+    assert.strictEqual(tracker.getKeyFromUri(vscode.Uri.parse('kalpy-ptt:/Gossiping/12345.ptt')), 'Gossiping/12345');
 
     // Invalid scheme
     assert.strictEqual(tracker.parseUri(vscode.Uri.parse('file:/Gossiping/12345.ptt')), null);
     assert.strictEqual(tracker.getKeyFromUri(vscode.Uri.parse('file:/Gossiping/12345.ptt')), null);
 
     // Invalid path
-    assert.strictEqual(tracker.parseUri(vscode.Uri.parse('ptt:/')), null);
-    assert.strictEqual(tracker.parseUri(vscode.Uri.parse('ptt:/Gossiping')), null);
+    assert.strictEqual(tracker.parseUri(vscode.Uri.parse('kalpy-ptt:/')), null);
+    assert.strictEqual(tracker.parseUri(vscode.Uri.parse('kalpy-ptt:/Gossiping')), null);
     assert.strictEqual(tracker.parseUri(undefined), null);
   });
 
   it('rejects startTracking if not logged in or invalid URI', async () => {
     isLoggedIn = false;
-    const uri = vscode.Uri.parse('ptt:/Gossiping/12345.ptt');
+    const uri = vscode.Uri.parse('kalpy-ptt:/Gossiping/12345.ptt');
     const started = await tracker.startTracking(uri);
     assert.strictEqual(started, false);
     assert.strictEqual(tracker.isTracking(uri), false);
@@ -58,7 +58,7 @@ describe('LiveTracker Unit Tests', () => {
   });
 
   it('starts, checks, and stops tracking successfully', async () => {
-    const uri = vscode.Uri.parse('ptt:/Gossiping/12345.ptt');
+    const uri = vscode.Uri.parse('kalpy-ptt:/Gossiping/12345.ptt');
 
     assert.strictEqual(tracker.isTracking(uri), false);
     assert.strictEqual(tracker.getTrackingCount(), 0);
@@ -85,7 +85,7 @@ describe('LiveTracker Unit Tests', () => {
   });
 
   it('toggles live tracking state on and off', async () => {
-    const uri = vscode.Uri.parse('ptt:/C_Chat/99999.ptt');
+    const uri = vscode.Uri.parse('kalpy-ptt:/C_Chat/99999.ptt');
 
     // 1. Toggle ON
     const state1 = await tracker.toggle(uri);
@@ -99,8 +99,8 @@ describe('LiveTracker Unit Tests', () => {
   });
 
   it('stopAll clears all active sessions across multiple articles', async () => {
-    const uri1 = vscode.Uri.parse('ptt:/Gossiping/111.ptt');
-    const uri2 = vscode.Uri.parse('ptt:/NBA/222.ptt');
+    const uri1 = vscode.Uri.parse('kalpy-ptt:/Gossiping/111.ptt');
+    const uri2 = vscode.Uri.parse('kalpy-ptt:/NBA/222.ptt');
 
     await tracker.startTracking(uri1);
     await tracker.startTracking(uri2);
@@ -134,7 +134,7 @@ describe('LiveTracker Unit Tests', () => {
       lines: ['Initial line 1', 'Initial line 2']
     };
 
-    const uri = vscode.Uri.parse('ptt:/Gossiping/12345.ptt');
+    const uri = vscode.Uri.parse('kalpy-ptt:/Gossiping/12345.ptt');
     await provider.readFile(uri);
 
     let fileChangedCount = 0;
