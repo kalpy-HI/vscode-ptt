@@ -11,7 +11,7 @@
   "categories": [
     "Other"
   ],
-  "publisher": "Yukai",
+  "publisher": "kalpy",
   "author": {
     "email": "nyan@yukaii.tw",
     "name": "Yukai Huang",
@@ -35,7 +35,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/Yukaii/vscode-ptt"
+    "url": "https://github.com/kalpy-HI/vscode-ptt"
   },
   "main": "./out/extension.js",
   "contributes": {

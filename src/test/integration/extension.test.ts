@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 
 suite('Extension Integration Tests', () => {
   test('Extension activates and registers commands', async () => {
-    const ext = vscode.extensions.getExtension('Yukai.vscode-ptt');
+    const ext = vscode.extensions.getExtension('kalpy.vscode-ptt');
     assert.ok(ext, 'Extension should be present in host');
 
     if (!ext.isActive) {
@@ -22,7 +22,7 @@ suite('Extension Integration Tests', () => {
   });
 
   test('Can execute ptt.refresh-article command without error', async () => {
-    const ext = vscode.extensions.getExtension('Yukai.vscode-ptt');
+    const ext = vscode.extensions.getExtension('kalpy.vscode-ptt');
     if (ext && !ext.isActive) {
       await ext.activate();
     }
